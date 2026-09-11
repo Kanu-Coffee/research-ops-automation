@@ -1,0 +1,39 @@
+# 외부 Delivery Gateway 측 공개 예시다. ResearchOps와 Codex는 이 파일을 로드하지 않는다.
+version: 1
+
+groups:
+  - id: release-team
+    name: 가상 릴리스 모니터링 수신자
+    to:
+      - release-owner@example.com
+      - release-planning@example.com
+      - release-research@example.com
+      - release-design@example.com
+      - release-operations@example.com
+    cc: []
+    bcc: []
+    enabled: true
+
+  - id: release-stakeholders
+    name: 가상 릴리스 검토 수신자
+    to:
+      - release-stakeholder@example.com
+    cc: []
+    bcc: []
+    enabled: true
+
+  - id: researchops-admins
+    name: ResearchOps 시스템 관리자
+    to:
+      - researchops-admin@example.com
+    cc: []
+    bcc: []
+    enabled: true
+
+  - id: safe-test-recipient
+    name: 개발 테스트 수신자
+    to:
+      - safe-test-recipient@example.com
+    cc: []
+    bcc: []
+    enabled: false

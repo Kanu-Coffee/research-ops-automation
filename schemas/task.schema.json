@@ -1,0 +1,538 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/researchops/task.schema.json",
+  "title": "ResearchOps Task Definition v2",
+  "type": "object",
+  "required": [
+    "version",
+    "id",
+    "name",
+    "enabled",
+    "workspace",
+    "runner",
+    "instructions",
+    "output",
+    "delivery"
+  ],
+  "properties": {
+    "version": {
+      "const": 2
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{1,63}$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "enabled": {
+      "type": "boolean"
+    },
+    "description": {
+      "type": "string"
+    },
+    "schedule": {
+      "type": "object",
+      "required": [
+        "cron",
+        "timezone",
+        "misfire_policy"
+      ],
+      "properties": {
+        "cron": {
+          "type": "string",
+          "minLength": 1
+        },
+        "timezone": {
+          "type": "string",
+          "minLength": 1
+        },
+        "misfire_policy": {
+          "enum": [
+            "skip",
+            "enqueue_once",
+            "catch_up"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "workspace": {
+      "type": "object",
+      "required": [
+        "mode",
+        "access"
+      ],
+      "properties": {
+        "mode": {
+          "const": "persistent_task"
+        },
+        "access": {
+          "const": "read_write_execute"
+        }
+      },
+      "$comment": "The application derives one stable workspace root from the task id. Each Codex invocation receives full read/write/create/delete/execute access to the shared project directory and its current phase staging inside that root; other phase staging, application state, another task workspace, delivery outbox, and external credentials are not exposed.",
+      "additionalProperties": false
+    },
+    "runner": {
+      "type": "object",
+      "required": [
+        "type",
+        "session_mode",
+        "concurrency",
+        "sandbox",
+        "network_profile",
+        "resource_profile"
+      ],
+      "properties": {
+        "type": {
+          "enum": [
+            "codex_exec",
+            "antigravity_exec",
+            "fake"
+          ]
+        },
+        "executable_path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "session_mode": {
+          "const": "fresh"
+        },
+        "timeout_seconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "no_progress_timeout_seconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_attempts": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
+        },
+        "concurrency": {
+          "const": 1,
+          "default": 1
+        },
+        "sandbox": {
+          "const": "task-workspace"
+        },
+        "network_profile": {
+          "$ref": "#/$defs/profileId"
+        },
+        "resource_profile": {
+          "$ref": "#/$defs/profileId"
+        },
+        "model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reasoning_effort": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "stages": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "research": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "type",
+                "model",
+                "reasoning_effort"
+              ],
+              "properties": {
+                "type": {
+                  "enum": [
+                    "codex_exec",
+                    "antigravity_exec",
+                    "fake"
+                  ]
+                },
+                "model": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 200
+                },
+                "reasoning_effort": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 64
+                }
+              }
+            },
+            "compose": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "type",
+                "model",
+                "reasoning_effort"
+              ],
+              "properties": {
+                "type": {
+                  "enum": [
+                    "codex_exec",
+                    "antigravity_exec",
+                    "fake"
+                  ]
+                },
+                "model": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 200
+                },
+                "reasoning_effort": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 64
+                }
+              }
+            }
+          }
+        }
+      },
+      "$comment": "Runtime limits are optional operational safeguards. Supported runner types: codex_exec (OpenAI Codex CLI), antigravity_exec (Google Antigravity agy -p CLI), or fake (test doubles). A task requests only an application-approved network profile; it cannot select host-wide access or define its own egress policy.",
+      "additionalProperties": false
+    },
+    "instructions": {
+      "type": "object",
+      "required": [
+        "research_files",
+        "compose_files"
+      ],
+      "properties": {
+        "research_files": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/relativePath"
+          },
+          "contains": {
+            "const": "task.md"
+          },
+          "minContains": 1
+        },
+        "compose_files": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/relativePath"
+          },
+          "contains": {
+            "const": "task.md"
+          },
+          "minContains": 1
+        }
+      },
+      "$comment": "Canonical task.md is intentionally shared by both phases and MUST contain an explicit invocation_stage guard. Phase-specific lists separate supplemental instructions: for example, email_spec.md belongs only to compose_files and is not injected into Research. Instructions may expose allowed opaque group identifiers, never addresses or membership.",
+      "additionalProperties": false
+    },
+    "output": {
+      "type": "object",
+      "required": [
+        "research_schema",
+        "composition_record_schema",
+        "composition_schema",
+        "html_path",
+        "text_path"
+      ],
+      "properties": {
+        "research_schema": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "composition_record_schema": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "composition_schema": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "html_path": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "text_path": {
+          "$ref": "#/$defs/relativePath"
+        }
+      },
+      "$comment": "research_schema, composition_record_schema, and composition_schema are canonical task-package-relative schema paths. Hard-required business fields MUST be limited to the minimum needed for stable record identity and recipient/message rules; optional detail absence is a warning and never causes a record-only silent drop. The composition view carries source record fields forward rather than reducing them to an application-authored summary. html_path and text_path are relative to the current Compose phase output root, are written by Codex, and are validated before handoff.",
+      "additionalProperties": false
+    },
+    "delivery": {
+      "type": "object",
+      "required": [
+        "message_type",
+        "mode",
+        "send_on_empty",
+        "partial_policy"
+      ],
+      "properties": {
+        "message_type": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{1,31}$",
+          "not": {
+            "const": "system_alert"
+          }
+        },
+        "mode": {
+          "enum": [
+            "disabled",
+            "dry_run",
+            "handoff"
+          ]
+        },
+        "recipient_routing_mode": {
+          "enum": [
+            "legacy_ids",
+            "catalog_name"
+          ],
+          "default": "legacy_ids",
+          "description": "Omitted on existing packages: select a fixed allowed ID. catalog_name selects an exact display name from the run's active recipient catalog snapshot."
+        },
+        "sender_profile_id": {
+          "$ref": "#/$defs/profileId",
+          "default": "default",
+          "description": "Protected application SMTP profile; never an email address or credential."
+        },
+        "allowed_recipient_group_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/groupId"
+          }
+        },
+        "send_on_empty": {
+          "type": "boolean"
+        },
+        "partial_policy": {
+          "enum": [
+            "send_with_warning",
+            "hold",
+            "fail"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "recipient_routing_mode"
+            ],
+            "properties": {
+              "recipient_routing_mode": {
+                "const": "catalog_name"
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "required": [
+                "allowed_recipient_group_ids"
+              ]
+            }
+          },
+          "else": {
+            "required": [
+              "allowed_recipient_group_ids"
+            ]
+          }
+        }
+      ],
+      "$comment": "legacy_ids requires a composition recipient_group_id enum matching allowed_recipient_group_ids. catalog_name requires a recipient_group_name string without a fixed enum; the application resolves the exact name through the immutable input snapshot to a stable protected delivery ID. Workers never see addresses or SMTP credentials.",
+      "additionalProperties": false
+    },
+    "state": {
+      "type": "object",
+      "properties": {
+        "dedupe": {
+          "type": "object",
+          "required": [
+            "enabled"
+          ],
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false
+            },
+            "key_fields": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "content_fields": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "enabled": {
+                    "const": true
+                  }
+                },
+                "required": [
+                  "enabled"
+                ]
+              },
+              "then": {
+                "required": [
+                  "key_fields",
+                  "content_fields"
+                ]
+              }
+            }
+          ],
+          "$comment": "Content dedupe is explicit opt-in and is disabled when this object is absent or enabled is false. The application derives a conservative entity key from key_fields and a separate canonical content fingerprint from content_fields. Only a verified-sent record matching both may be excluded; changed or ambiguous records continue with a warning. Codex-provided fingerprints are never authoritative. Schedule occurrence and handoff idempotency remain enabled independently.",
+          "additionalProperties": false
+        },
+        "research_context": {
+          "type": "object",
+          "required": [
+            "enabled"
+          ],
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "active_issuers": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 8,
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "woori",
+                  "shinhan",
+                  "kb",
+                  "samsung",
+                  "hyundai",
+                  "hana",
+                  "lotte",
+                  "bc"
+                ]
+              }
+            },
+            "reference_date": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date"
+            },
+            "lookback_days": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 3660
+            },
+            "series_id": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+            },
+            "delivery_history": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "enabled": {
+                    "const": true
+                  }
+                }
+              },
+              "then": {
+                "required": [
+                  "active_issuers",
+                  "lookback_days",
+                  "series_id"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    "retention": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "alerting": {
+      "type": "object",
+      "required": [
+        "recipient_group_id",
+        "events"
+      ],
+      "properties": {
+        "recipient_group_id": {
+          "$ref": "#/$defs/groupId"
+        },
+        "events": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "failed",
+              "timed_out",
+              "needs_attention",
+              "handoff_uncertain"
+            ]
+          }
+        }
+      },
+      "$comment": "System alerts use a fixed external group signal and are not selected by the task's Codex composition step.",
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "groupId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{1,63}$"
+    },
+    "profileId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{1,63}$"
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+    }
+  },
+  "additionalProperties": false
+}

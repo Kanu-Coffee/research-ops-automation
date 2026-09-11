@@ -1,0 +1,13 @@
+[Unit]
+Description=ResearchOps Cron Schedule Tick Timer
+After=network.target
+
+[Timer]
+# Fire every minute to evaluate enabled task cron expressions
+OnCalendar=*-*-* *:*:00 Asia/Seoul
+Persistent=true
+AccuracySec=1s
+Unit=researchops-scheduler.service
+
+[Install]
+WantedBy=timers.target

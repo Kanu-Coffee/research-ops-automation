@@ -1,0 +1,25 @@
+{
+  "synthetic": true,
+  "targets": [
+    {
+      "target": "source-alpha",
+      "status": "checked",
+      "record": {
+        "record_id": "partial-alpha",
+        "title": "가상 알파 확인 사항",
+        "change": "테스트 자료 열람 완료",
+        "optional_note": null
+      }
+    },
+    {
+      "target": "source-beta",
+      "status": "unavailable",
+      "notes": "합성 시나리오: 자료 제공 중단"
+    },
+    {
+      "target": "source-gamma",
+      "status": "blocked",
+      "notes": "합성 시나리오: 허용되지 않은 자료"
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+# 외부 Delivery Gateway 측 공개 예시다. ResearchOps와 Codex는 이 파일을 로드하지 않는다.
+version: 1
+
+profiles:
+  - id: release-notifications
+    display_name: 가상 릴리스 알림팀
+    account_email: release-sender@example.com
+    credential_ref: gmail/release-notifications/token.json
+    client_config_ref: gmail/common/client-secret.json
+    default_from_alias: null
+    enabled: false
+
+  - id: example-research
+    display_name: 가상 소프트웨어 조사
+    account_email: example-research-sender@example.com
+    credential_ref: gmail/example-research/token.json
+    client_config_ref: gmail/common/client-secret.json
+    default_from_alias: null
+    enabled: false
+
+  - id: researchops-alerts
+    display_name: ResearchOps 시스템 알림
+    account_email: researchops-alerts@example.com
+    credential_ref: gmail/researchops-alerts/token.json
+    client_config_ref: gmail/common/client-secret.json
+    default_from_alias: null
+    enabled: false

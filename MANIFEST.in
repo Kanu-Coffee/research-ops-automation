@@ -1,0 +1,22 @@
+include uv.lock VERSION AGENTS.md START_HERE.md PACK_MANIFEST.md FILE_TREE.txt CHECKSUMS.sha256
+include CHANGELOG.md SECURITY.md CONTRIBUTING.md
+include setup.cfg
+include .gitignore .gitattributes .github/workflows/verify.yml
+recursive-include docs *.md
+recursive-include examples *.md *.yaml *.json *.txt *.html *.png
+recursive-include tasks *.md *.yaml *.json *.txt *.html *.png
+recursive-include schemas *.json
+recursive-include tests *.py
+recursive-include bin researchctl *.sh
+recursive-include deploy *.md *.service *.timer *.conf
+recursive-include templates *.md *.example
+recursive-include scripts *.py
+prune var
+prune ops_test_info
+prune prompts
+prune evidence
+prune runtime
+prune backups
+prune data
+prune config
+global-exclude __pycache__ *.pyc *.pyo

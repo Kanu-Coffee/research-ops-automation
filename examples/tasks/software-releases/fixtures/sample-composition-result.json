@@ -1,0 +1,10 @@
+{
+  "recipient_group_id": "release-team",
+  "recipient_group_reason": "preview 릴리스가 없는 일상 업데이트이므로 release-team을 선택함",
+  "subject": "[가상 소프트웨어 릴리스] 2026-09-02 업데이트",
+  "html_path": "email.html",
+  "text_path": "email.txt",
+  "included_record_ids": [
+    "atlas-notes::2.4.0"
+  ]
+}

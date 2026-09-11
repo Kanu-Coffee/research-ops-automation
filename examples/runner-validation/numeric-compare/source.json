@@ -1,0 +1,20 @@
+{
+  "synthetic": true,
+  "unit": "completed_jobs",
+  "baseline_date": "2026-09-01",
+  "current_date": "2026-09-05",
+  "metrics": [
+    {
+      "id": "metric-alpha",
+      "title": "가상 알파 처리량",
+      "baseline": 40,
+      "current": 50
+    },
+    {
+      "id": "metric-beta",
+      "title": "가상 베타 처리량",
+      "baseline": 80,
+      "current": 60
+    }
+  ]
+}

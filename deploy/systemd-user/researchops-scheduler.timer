@@ -1,0 +1,12 @@
+[Unit]
+Description=ResearchOps Seoul schedule timer (installed disabled)
+AssertPathExists=@ROOT@/config/settings.yaml
+
+[Timer]
+OnCalendar=*-*-* *:*:00 Asia/Seoul
+Persistent=true
+AccuracySec=1s
+Unit=researchops-scheduler.service
+
+[Install]
+WantedBy=timers.target

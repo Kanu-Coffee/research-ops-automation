@@ -1,0 +1,17 @@
+{
+  "schema_version": 2,
+  "external_receipt_id": "receipt_run_01_sent",
+  "handoff_id": "handoff_run_01",
+  "idempotency_key": "researchops:run_01:report:v1",
+  "delivery_request_sha256": "d695e5b609d45104a19d1a69b7766a5b6ec995611e1a785d7f514e22c5f1df06",
+  "status": "sent",
+  "occurred_at": "2026-09-02T00:05:04Z",
+  "external_message_ref": "gateway-message-run-01",
+  "error": null,
+  "proof": {
+    "type": "test_fixture",
+    "issuer": "fake-delivery-gateway",
+    "key_id": null,
+    "value": null
+  }
+}

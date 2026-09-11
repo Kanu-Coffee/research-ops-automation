@@ -1,0 +1,959 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/researchops/composition-input.schema.json",
+  "title": "ResearchOps Immutable Composition Input v2/v3/v4",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "task_id",
+    "run_id",
+    "task_version_hash",
+    "composition_revision",
+    "run",
+    "result",
+    "coverage",
+    "allowed_recipient_group_ids",
+    "reportable_records",
+    "inline_artifacts",
+    "attachments"
+  ],
+  "properties": {
+    "schema_version": {
+      "enum": [
+        2,
+        3,
+        4
+      ]
+    },
+    "task_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{1,63}$"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255
+    },
+    "task_version_hash": {
+      "$ref": "#/$defs/sha256"
+    },
+    "composition_revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "run": {
+      "type": "object",
+      "required": [
+        "scheduled_for",
+        "timezone",
+        "local_date",
+        "local_date_display"
+      ],
+      "properties": {
+        "scheduled_for": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "timezone": {
+          "type": "string",
+          "minLength": 1
+        },
+        "local_date": {
+          "type": "string",
+          "format": "date"
+        },
+        "local_date_display": {
+          "type": "string",
+          "pattern": "^\\d{4}\\.\\d{2}\\.\\d{2}$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "result": {
+      "type": "object",
+      "required": [
+        "status",
+        "summary",
+        "warnings"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "success",
+            "no_updates",
+            "partial"
+          ]
+        },
+        "summary": {
+          "type": "string"
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "coverage": {
+      "type": "object",
+      "required": [
+        "complete",
+        "expected_target_count",
+        "completed_target_count",
+        "issues"
+      ],
+      "properties": {
+        "complete": {
+          "type": "boolean"
+        },
+        "expected_target_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "completed_target_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "issues": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "target",
+              "status",
+              "notes"
+            ],
+            "properties": {
+              "target": {
+                "type": "string",
+                "minLength": 1
+              },
+              "status": {
+                "enum": [
+                  "unavailable",
+                  "blocked"
+                ]
+              },
+              "notes": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "allowed_recipient_group_ids": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/groupId"
+      }
+    },
+    "reportable_records": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "record_id"
+        ],
+        "properties": {
+          "record_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "inline_artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "path",
+          "cid",
+          "mime_type",
+          "sha256",
+          "size_bytes"
+        ],
+        "properties": {
+          "path": {
+            "$ref": "#/$defs/relativePath"
+          },
+          "cid": {
+            "type": "string",
+            "minLength": 1
+          },
+          "mime_type": {
+            "type": "string",
+            "minLength": 1
+          },
+          "logical_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sha256": {
+            "$ref": "#/$defs/sha256"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "artifact_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "record_ids": {
+            "$ref": "#/$defs/recordIds"
+          },
+          "source": {
+            "$ref": "#/$defs/artifactSource"
+          },
+          "derived_from": {
+            "$ref": "#/$defs/acquisitionReferences"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "attachments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "path",
+          "filename",
+          "mime_type",
+          "sha256",
+          "size_bytes"
+        ],
+        "properties": {
+          "path": {
+            "$ref": "#/$defs/relativePath"
+          },
+          "filename": {
+            "type": "string",
+            "minLength": 1
+          },
+          "mime_type": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sha256": {
+            "$ref": "#/$defs/sha256"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "artifact_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "record_ids": {
+            "$ref": "#/$defs/recordIds"
+          },
+          "source": {
+            "$ref": "#/$defs/artifactSource"
+          },
+          "derived_from": {
+            "$ref": "#/$defs/acquisitionReferences"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "recipient_routing_mode": {
+      "enum": [
+        "legacy_ids",
+        "catalog_name"
+      ]
+    },
+    "recipient_groups": {
+      "type": "array",
+      "minItems": 0,
+      "items": {
+        "type": "object",
+        "required": [
+          "recipient_group_id",
+          "display_name"
+        ],
+        "properties": {
+          "recipient_group_id": {
+            "$ref": "#/$defs/groupId"
+          },
+          "display_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "artifact_report": {
+      "$ref": "#/$defs/artifactReport"
+    },
+    "research_context": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "task_id",
+        "task_version_hash",
+        "origin_run_id",
+        "parent_run_id",
+        "logical_date",
+        "timezone",
+        "active_issuers",
+        "series_id",
+        "reference_date",
+        "reference_date_source",
+        "lookback_days",
+        "start_date",
+        "end_date",
+        "bounds",
+        "data_basis"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "task_id": {
+          "type": "string"
+        },
+        "task_version_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "origin_run_id": {
+          "type": "string"
+        },
+        "parent_run_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "logical_date": {
+          "type": "string",
+          "format": "date"
+        },
+        "timezone": {
+          "const": "Asia/Seoul"
+        },
+        "active_issuers": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "series_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+        },
+        "reference_date": {
+          "type": "string",
+          "format": "date"
+        },
+        "reference_date_source": {
+          "enum": [
+            "task_override",
+            "logical_date"
+          ]
+        },
+        "lookback_days": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3660
+        },
+        "start_date": {
+          "type": "string",
+          "format": "date"
+        },
+        "end_date": {
+          "type": "string",
+          "format": "date"
+        },
+        "bounds": {
+          "const": "inclusive"
+        },
+        "data_basis": {
+          "const": "current_snapshot_filtered_by_launch_date"
+        }
+      },
+      "additionalProperties": false
+    },
+    "delivery_history": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "task_id",
+        "series_id",
+        "origin_run_id",
+        "parent_run_id",
+        "entries",
+        "unresolved",
+        "history_complete",
+        "limits"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "task_id": {
+          "type": "string"
+        },
+        "series_id": {
+          "type": "string"
+        },
+        "origin_run_id": {
+          "type": "string"
+        },
+        "parent_run_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "entries": {
+          "type": "array",
+          "maxItems": 500,
+          "items": {
+            "type": "object"
+          }
+        },
+        "unresolved": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "history_complete": {
+          "type": "boolean"
+        },
+        "limits": {
+          "type": "object"
+        },
+        "ledger_reconciliation": {
+          "type": "object",
+          "required": [
+            "available",
+            "updates"
+          ],
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "ledger_sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "updates": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
+            "unresolved": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
+            "applied": {
+              "const": false
+            }
+          },
+          "additionalProperties": false
+        },
+        "truncated": {
+          "const": true
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "$comment": "The application hashes this canonical object outside the worker workspace. v2 binds the legacy ID allowlist. v3 binds all active mapped public catalog identities and display names at input creation. Exact run/task/version/revision and result hashes must be checked at delivery. Both versions preserve all reportable records and original message bytes. v4 seals controller-verified artifact availability, record associations and approved media for either routing mode.",
+  "$defs": {
+    "acquisitionReferences": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "required": ["acquisition_id", "source_sha256"],
+        "properties": {
+          "acquisition_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+          "source_sha256": {"$ref": "#/$defs/sha256"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "groupId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{1,63}$"
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "recordIds": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "maxItems": 10000
+    },
+    "artifactSource": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "connection_id",
+            "document_id",
+            "issuer",
+            "product_code",
+            "sha256",
+            "size_bytes"
+          ],
+          "properties": {
+            "kind": {
+              "const": "cardrag_pdf"
+            },
+            "connection_id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$"
+            },
+            "document_id": {
+              "type": "string",
+              "pattern": "^doc_[a-f0-9]{64}$"
+            },
+            "issuer": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            },
+            "product_code": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            },
+            "sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "size_bytes": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "url",
+            "url_sha256"
+          ],
+          "properties": {
+            "kind": {
+              "const": "official_image"
+            },
+            "url": {
+              "type": "string",
+              "format": "uri",
+              "pattern": "^https://",
+              "maxLength": 4096
+            },
+            "url_sha256": {
+              "$ref": "#/$defs/sha256"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "artifactReport": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "task_id",
+        "run_id",
+        "task_version_hash",
+        "composition_revision",
+        "entries"
+      ],
+      "properties": {
+        "acquisition_evidence": {
+          "type": "object",
+          "required": ["run_id", "attempt", "ledger_sha256"],
+          "properties": {
+            "run_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,254}$"},
+            "attempt": {"type": "integer", "minimum": 1},
+            "ledger_sha256": {"$ref": "#/$defs/sha256"}
+          },
+          "additionalProperties": false
+        },
+        "schema_version": {
+          "const": 1
+        },
+        "task_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{1,63}$"
+        },
+        "run_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "task_version_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "composition_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "entries": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "object",
+            "required": [
+              "artifact_id",
+              "path",
+              "role",
+              "scope",
+              "requested_record_ids",
+              "record_ids",
+              "declared_status",
+              "status",
+              "reason_code",
+              "source",
+              "sha256",
+              "size_bytes",
+              "include_in_compose",
+              "announce_missing"
+            ],
+            "properties": {
+              "artifact_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 255
+              },
+              "path": {
+                "$ref": "#/$defs/relativePath"
+              },
+              "role": {
+                "enum": [
+                  "attachment",
+                  "inline_image",
+                  "evidence"
+                ]
+              },
+              "scope": {
+                "enum": [
+                  "record",
+                  "run",
+                  "legacy"
+                ],
+                "description": "Resolved scope. Local run attachments and evidence have no record associations or remote source; evidence never enters Compose media."
+              },
+              "requested_record_ids": {
+                "$ref": "#/$defs/recordIds"
+              },
+              "record_ids": {
+                "$ref": "#/$defs/recordIds"
+              },
+              "declared_status": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 255
+              },
+              "status": {
+                "enum": [
+                  "available",
+                  "failed",
+                  "excluded"
+                ]
+              },
+              "reason_code": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 255
+              },
+              "source": {
+                "$ref": "#/$defs/artifactSource"
+              },
+              "derived_from": {
+                "$ref": "#/$defs/acquisitionReferences"
+              },
+              "sha256": {
+                "anyOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/$defs/sha256"
+                  }
+                ]
+              },
+              "size_bytes": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0
+              },
+              "include_in_compose": {
+                "type": "boolean"
+              },
+              "announce_missing": {
+                "type": "boolean"
+              },
+              "on_failure": {
+                "enum": [
+                  "continue",
+                  "hold"
+                ]
+              },
+              "requested_scope": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 64,
+                "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                "description": "Original requested scope; absent or null is supported for legacy diagnostics."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "derived_from": {
+          "type": "object",
+          "required": [
+            "run_id",
+            "composition_revision",
+            "artifact_report_sha256"
+          ],
+          "properties": {
+            "run_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            },
+            "composition_revision": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "artifact_report_sha256": {
+              "$ref": "#/$defs/sha256"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "schema_version": {
+            "const": 2
+          }
+        }
+      },
+      "then": {
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "recipient_routing_mode"
+              ]
+            },
+            {
+              "required": [
+                "recipient_groups"
+              ]
+            }
+          ]
+        }
+      },
+      "else": {
+        "required": [
+          "recipient_routing_mode",
+          "recipient_groups"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "schema_version": {
+            "const": 3
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "recipient_routing_mode": {
+            "const": "catalog_name"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "recipient_routing_mode": {
+            "const": "catalog_name"
+          }
+        },
+        "required": [
+          "recipient_routing_mode"
+        ]
+      },
+      "then": {
+        "properties": {
+          "recipient_groups": {
+            "minItems": 1
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "recipient_groups": {
+            "maxItems": 0
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "schema_version": {
+            "const": 4
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "artifact_report"
+        ],
+        "properties": {
+          "inline_artifacts": {
+            "items": {
+              "required": [
+                "artifact_id",
+                "record_ids"
+              ]
+            }
+          },
+          "attachments": {
+            "items": {
+              "required": [
+                "artifact_id",
+                "record_ids"
+              ]
+            }
+          }
+        }
+      },
+      "else": {
+        "not": {
+          "required": [
+            "artifact_report"
+          ]
+        },
+        "properties": {
+          "inline_artifacts": {
+            "items": {
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "artifact_id"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "record_ids"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "source"
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          "attachments": {
+            "items": {
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "artifact_id"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "record_ids"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "source"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "dependentRequired": {
+    "delivery_history": [
+      "research_context"
+    ]
+  }
+}

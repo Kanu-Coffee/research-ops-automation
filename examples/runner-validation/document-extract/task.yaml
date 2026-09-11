@@ -1,0 +1,39 @@
+version: 2
+id: sample-document-extract
+name: 합성 문서 추출
+description: 운영 자료와 독립된 고정 합성 입력을 사용하는 runner 검증용 task
+enabled: false
+schedule:
+  cron: "0 9 * * *"
+  timezone: Asia/Seoul
+  misfire_policy: enqueue_once
+workspace:
+  mode: persistent_task
+  access: read_write_execute
+runner:
+  type: fake
+  session_mode: fresh
+  timeout_seconds: 120
+  max_attempts: 1
+  concurrency: 1
+  sandbox: task-workspace
+  network_profile: none
+  resource_profile: standard-research
+instructions:
+  research_files: [task.md, source.txt]
+  compose_files: [task.md, email_spec.md]
+output:
+  research_schema: output.schema.json
+  composition_record_schema: composition-record.schema.json
+  composition_schema: composition.schema.json
+  html_path: email.html
+  text_path: email.txt
+delivery:
+  message_type: validation_digest
+  mode: dry_run
+  allowed_recipient_group_ids: [sample-review-team]
+  send_on_empty: true
+  partial_policy: send_with_warning
+state:
+  dedupe:
+    enabled: false

@@ -1,0 +1,21 @@
+{
+  "schema_version": 2,
+  "external_receipt_id": "receipt_run_01_failed",
+  "handoff_id": "handoff_run_01",
+  "idempotency_key": "researchops:run_01:report:v1",
+  "delivery_request_sha256": "d695e5b609d45104a19d1a69b7766a5b6ec995611e1a785d7f514e22c5f1df06",
+  "status": "failed",
+  "occurred_at": "2026-09-02T00:05:04Z",
+  "external_message_ref": null,
+  "error": {
+    "code": "UNKNOWN_GROUP",
+    "message": "Fake Gateway가 승인된 group mapping을 찾지 못함",
+    "retryable": false
+  },
+  "proof": {
+    "type": "test_fixture",
+    "issuer": "fake-delivery-gateway",
+    "key_id": null,
+    "value": null
+  }
+}

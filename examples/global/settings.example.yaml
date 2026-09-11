@@ -1,0 +1,99 @@
+version: 2
+
+environment: development
+timezone: Asia/Seoul
+
+paths:
+  tasks_dir: ./tasks
+  data_dir: ./var
+  task_drafts_dir: ./var/task-drafts
+  task_versions_dir: ./var/task-versions
+  task_workspaces_dir: ./var/task-workspaces
+  run_archive_dir: ./var/run-archive
+  delivery_outbox_dir: ./var/delivery-outbox
+  receipts_dir: ./var/receipts
+  database: ./var/researchops.db
+
+runner:
+  codex_binary: codex
+  antigravity_binary: agy
+  default_type: codex_exec  # codex_exec | antigravity_exec | fake
+  default_sandbox: task-workspace
+  default_network_profile: none
+  default_timeout_seconds: 7200
+  default_session_mode: fresh
+  global_concurrency: 2
+  task_local_home: true
+  task_local_tmp: true
+  # Production invocation stdout + stderr; separate from final-result import.
+  trace_max_bytes: 67108864       # 64 MiB, including raw newline bytes
+  trace_max_event_bytes: 8388608  # 8 MiB per stdout JSONL event, excluding newline
+  trace_max_events: 10000
+  trace_preview_bytes: 65536     # 64 KiB per stream for UI/log previews
+
+network_profiles:
+  none:
+    mode: none
+  public-research:
+    mode: mediated
+    allowed_capabilities:
+      - http_get
+      - http_head
+      - package_fetch
+    block_private_networks: true
+    max_response_bytes: 50000000
+
+resource_profiles:
+  standard-research:
+    workspace_bytes: 10737418240
+    workspace_inodes: 500000
+    memory_bytes: 4294967296
+    max_pids: 256
+
+scheduler:
+  enabled: true
+  tick_seconds: 60
+  tick_timeout_seconds: 30
+  stale_lease_seconds: 300
+  max_queued_runs_per_task: 1
+
+worker:
+  poll_interval_seconds: 2
+  error_backoff_initial_seconds: 5
+  error_backoff_max_seconds: 60
+  max_consecutive_errors: 5
+
+delivery:
+  global_handoff_kill_switch: true
+  default_mode: dry_run
+  publisher: filesystem_outbox
+  require_verified_receipt_for_success: true
+  max_message_bytes: 20000000
+
+logging:
+  level: INFO
+  json: true
+  redact_sensitive_values: true
+
+retention:
+  default_run_days: 90
+  default_artifact_days: 90
+  default_log_days: 180
+  task_workspace_auto_delete: false
+
+web:
+  enabled: false
+  bind: 127.0.0.1
+  port: 8765
+  # Application login is always enforced; bootstrap the first admin in Web.
+  allow_remote_proxy: false
+  allow_insecure_local_auth: false
+  max_request_bytes: 2000000
+  trusted_proxy_cidrs:
+    - 127.0.0.1/32
+  allowed_hosts:
+    - localhost
+    - 127.0.0.1
+    - researchops.example.org
+  require_origin_check: true
+  csrf_protection: true

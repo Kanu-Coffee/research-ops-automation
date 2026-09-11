@@ -1,0 +1,35 @@
+{
+  "status": "partial",
+  "summary": "합성 범위 3곳 중 1곳을 확인했고 2곳은 확인할 수 없습니다.",
+  "records": [
+    {
+      "record_id": "partial-alpha",
+      "title": "가상 알파 확인 사항",
+      "change": "테스트 자료 열람 완료",
+      "optional_note": null,
+      "source_file": "source.json"
+    }
+  ],
+  "coverage": {
+    "complete": false,
+    "expected_target_count": 3,
+    "completed_target_count": 1,
+    "issues": [
+      {
+        "target": "source-beta",
+        "status": "unavailable",
+        "notes": "합성 시나리오: 자료 제공 중단"
+      },
+      {
+        "target": "source-gamma",
+        "status": "blocked",
+        "notes": "합성 시나리오: 허용되지 않은 자료"
+      }
+    ]
+  },
+  "warnings": [
+    "source-beta: 합성 시나리오의 자료 제공 중단",
+    "source-gamma: 합성 시나리오의 자료 접근 차단"
+  ],
+  "artifacts": []
+}

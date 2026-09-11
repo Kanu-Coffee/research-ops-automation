@@ -1,0 +1,20 @@
+[Unit]
+Description=ResearchOps scheduler tick
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=__SERVICE_USER__
+Group=__SERVICE_GROUP__
+WorkingDirectory=__APP_DIR__
+Environment=RESEARCHOPS_CONFIG=__CONFIG_PATH__
+ExecStart=__VENV_DIR__/bin/researchctl scheduler tick
+TimeoutStartSec=30s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=__DATA_DIR__ __LOG_DIR__
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,42 @@
+{
+  "status": "success",
+  "summary": "합성 예제: 같은 가상 소프트웨어에 관한 두 record가 릴리스 안내 PDF를 공유하고 첫 record에 이미지를 연결합니다.",
+  "records": [
+    {"record_id": "example-record-1", "issuer": "example-issuer", "product_code": "EXAMPLE001", "title": "합성 소프트웨어 변경 1"},
+    {"record_id": "example-record-2", "issuer": "example-issuer", "product_code": "EXAMPLE001", "title": "합성 소프트웨어 변경 2"}
+  ],
+  "artifacts": [
+    {
+      "artifact_id": "example-release-notes",
+      "path": "documents/예제 릴리스 안내.pdf",
+      "filename": "예제 릴리스 안내.pdf",
+      "role": "attachment",
+      "scope": "record",
+      "record_ids": ["example-record-1", "example-record-2"],
+      "declared_status": "ready",
+      "mime_type": "application/pdf",
+      "source": {
+        "kind": "cardrag_pdf",
+        "connection_id": "cardrag",
+        "document_id": "doc_1111111111111111111111111111111111111111111111111111111111111111",
+        "issuer": "example-issuer",
+        "product_code": "EXAMPLE001",
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "size_bytes": 12345
+      },
+      "on_failure": "continue",
+      "announce_missing": false
+    },
+    {
+      "artifact_id": "example-release-image",
+      "path": "images/예제 릴리스.png",
+      "role": "inline_image",
+      "scope": "record",
+      "record_ids": ["example-record-1"],
+      "cid": "example-release-image",
+      "source": {"kind": "official_image", "url": "https://example.org/software-releases/synthetic-release.png"},
+      "on_failure": "continue",
+      "announce_missing": false
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+[합성 검증] 2026-09-06 합성 문서 추출
+합성 문서 2건의 변경사항을 추출했습니다.
+{
+  "record_id": "memo-alpha",
+  "title": "가상 알파 검색",
+  "change": "검색 결과 내보내기를 지원한다.",
+  "effective_date": "2026-09-01",
+  "owner": "제품 연구팀",
+  "source_file": "source.txt"
+}
+{
+  "record_id": "memo-beta",
+  "title": "가상 베타 정리",
+  "change": "중복 노트를 한 화면에서 비교한다.",
+  "effective_date": "2026-09-03",
+  "owner": "정보 설계팀",
+  "source_file": "source.txt"
+}

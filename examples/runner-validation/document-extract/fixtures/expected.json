@@ -1,0 +1,30 @@
+{
+  "task_id": "sample-document-extract",
+  "synthetic": true,
+  "research_status": "success",
+  "run_status": "succeeded",
+  "record_count": 2,
+  "record_ids": [
+    "memo-alpha",
+    "memo-beta"
+  ],
+  "coverage_complete": true,
+  "expected_target_count": 2,
+  "completed_target_count": 2,
+  "min_warning_count": 0,
+  "recipient_group_id": "sample-review-team",
+  "logical_date": "2026-09-06",
+  "scheduled_for": "2026-09-05T15:30:00+00:00",
+  "record_assertions": {
+    "memo-alpha": {
+      "title": "가상 알파 검색",
+      "effective_date": "2026-09-01",
+      "owner": "제품 연구팀"
+    },
+    "memo-beta": {
+      "title": "가상 베타 정리",
+      "effective_date": "2026-09-03",
+      "owner": "정보 설계팀"
+    }
+  }
+}

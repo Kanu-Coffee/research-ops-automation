@@ -1,0 +1,27 @@
+[Unit]
+Description=ResearchOps local web dashboard
+After=network.target
+StartLimitIntervalSec=5min
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=__SERVICE_USER__
+Group=__SERVICE_GROUP__
+WorkingDirectory=__APP_DIR__
+Environment=RESEARCHOPS_CONFIG=__CONFIG_PATH__
+ExecStart=__VENV_DIR__/bin/researchctl web serve --host 127.0.0.1 --port 8765
+Restart=on-failure
+RestartSec=10s
+RestartPreventExitStatus=78
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectHome=true
+ProtectSystem=strict
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadOnlyPaths=__TASKS_DIR__ __RUN_ARCHIVE_DIR__
+ReadWritePaths=__DATABASE_DIR__ __TASK_DRAFTS_DIR__ __TASK_VERSIONS_DIR__ __LOG_DIR__
+
+[Install]
+WantedBy=multi-user.target

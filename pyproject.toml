@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools==80.9.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "researchops"
+version = "1.0.0"
+description = "Seoul-time research orchestration with guarded built-in SMTP delivery"
+readme = "README.md"
+requires-python = ">=3.12"
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Environment :: Console",
+  "Environment :: Web Environment",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+]
+dependencies = ["PyYAML==6.0.3", "jsonschema==4.19.2"]
+
+[project.scripts]
+researchctl = "researchops.cli.main:main"
+
+[tool.setuptools.packages.find]
+include = ["researchops*"]
+
+[tool.setuptools.package-data]
+"researchops.storage" = ["schema.sql"]
+"researchops.web" = ["assets/brand/*.png", "assets/brand/*.ico"]
+
+[tool.setuptools.data-files]
+"share/researchops/schemas" = ["schemas/*.json"]
+"share/researchops/examples/media" = ["examples/media/*.md", "examples/media/*.json"]
+"share/researchops/examples/tasks/software-releases" = ["examples/tasks/software-releases/*.*"]
+"share/researchops/examples/tasks/software-releases/fixtures" = ["examples/tasks/software-releases/fixtures/*"]
+"share/researchops/examples/runner-validation" = ["examples/runner-validation/README.md"]
+"share/researchops/examples/runner-tool-validation" = ["examples/runner-tool-validation/README.md"]
+"share/researchops/examples/runner-validation/document-extract" = ["examples/runner-validation/document-extract/*.*"]
+"share/researchops/examples/runner-validation/document-extract/fixtures" = ["examples/runner-validation/document-extract/fixtures/*"]
+"share/researchops/examples/runner-validation/numeric-compare" = ["examples/runner-validation/numeric-compare/*.*"]
+"share/researchops/examples/runner-validation/numeric-compare/fixtures" = ["examples/runner-validation/numeric-compare/fixtures/*"]
+"share/researchops/examples/runner-validation/partial-coverage" = ["examples/runner-validation/partial-coverage/*.*"]
+"share/researchops/examples/runner-validation/partial-coverage/fixtures" = ["examples/runner-validation/partial-coverage/fixtures/*"]
+"share/researchops/examples/runner-validation/no-updates" = ["examples/runner-validation/no-updates/*.*"]
+"share/researchops/examples/runner-validation/no-updates/fixtures" = ["examples/runner-validation/no-updates/fixtures/*"]

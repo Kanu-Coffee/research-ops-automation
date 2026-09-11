@@ -1,0 +1,8 @@
+{
+  "recipient_group_id": "sample-review-team",
+  "recipient_group_reason": "합성 입력 검증 보고 전용 그룹을 선택했습니다.",
+  "subject": "[합성 검증] 2026-09-06 합성 변경 없음 보고",
+  "html_path": "email.html",
+  "text_path": "email.txt",
+  "included_record_ids": []
+}

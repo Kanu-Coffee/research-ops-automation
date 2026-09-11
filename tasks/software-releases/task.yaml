@@ -1,0 +1,67 @@
+version: 2
+id: software-releases
+name: 가상 소프트웨어 릴리스 모니터링
+description: Atlas Notes와 Cedar Board의 합성 릴리스 자료로 조사·메일 흐름을 학습한다.
+enabled: false
+schedule:
+  cron: 0 9 * * *
+  timezone: Asia/Seoul
+  misfire_policy: enqueue_once
+workspace:
+  mode: persistent_task
+  access: read_write_execute
+runner:
+  type: fake
+  session_mode: fresh
+  timeout_seconds: 7200
+  max_attempts: 2
+  concurrency: 1
+  sandbox: task-workspace
+  network_profile: none
+  resource_profile: standard-research
+  model: null
+  reasoning_effort: null
+instructions:
+  research_files:
+  - task.md
+  compose_files:
+  - task.md
+  - email_spec.md
+output:
+  research_schema: output.schema.json
+  composition_record_schema: composition-record.schema.json
+  composition_schema: composition.schema.json
+  html_path: email.html
+  text_path: email.txt
+delivery:
+  message_type: release_digest
+  mode: dry_run
+  allowed_recipient_group_ids:
+  - release-team
+  - release-stakeholders
+  send_on_empty: true
+  partial_policy: send_with_warning
+alerting:
+  recipient_group_id: researchops-admins
+  events:
+  - failed
+  - timed_out
+  - needs_attention
+  - handoff_uncertain
+state:
+  dedupe:
+    enabled: false
+    key_fields:
+    - publisher
+    - product_name
+    - release_version
+    content_fields:
+    - release_channel
+    - release_date
+    - changes
+    - sources
+    - notes
+retention:
+  run_days: 180
+  artifact_days: 365
+  log_days: 180

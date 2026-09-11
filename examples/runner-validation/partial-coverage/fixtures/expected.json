@@ -1,0 +1,23 @@
+{
+  "task_id": "sample-partial-coverage",
+  "synthetic": true,
+  "research_status": "partial",
+  "run_status": "succeeded",
+  "record_count": 1,
+  "record_ids": [
+    "partial-alpha"
+  ],
+  "coverage_complete": false,
+  "expected_target_count": 3,
+  "completed_target_count": 1,
+  "min_warning_count": 2,
+  "recipient_group_id": "sample-review-team",
+  "logical_date": "2026-09-06",
+  "scheduled_for": "2026-09-05T15:30:00+00:00",
+  "record_assertions": {
+    "partial-alpha": {
+      "optional_note": null,
+      "title": "가상 알파 확인 사항"
+    }
+  }
+}

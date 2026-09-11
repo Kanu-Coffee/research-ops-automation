@@ -1,0 +1,54 @@
+{
+  "status": "success",
+  "summary": "합성 소프트웨어 릴리스 1건",
+  "records": [
+    {
+      "record_id": "atlas-notes::2.4.0",
+      "record_type": "software_release",
+      "publisher": "Atlas Studio (fictional)",
+      "product_name": "Atlas Notes",
+      "release_version": "2.4.0",
+      "release_channel": "stable",
+      "release_date": "2026-09-01",
+      "changes": [
+        {
+          "title": "노트 내보내기 추가",
+          "details": "사용자가 선택한 노트를 UTF-8 텍스트 파일로 내보낸다."
+        }
+      ],
+      "sources": [
+        {
+          "type": "release_notes",
+          "url": "https://example.org/atlas-notes/releases/2.4.0",
+          "title": "Atlas Notes 2.4.0 — fictional release notes",
+          "published_date": "2026-09-01",
+          "official": true
+        }
+      ],
+      "notes": [
+        "공개 문서·회귀 테스트 전용 합성 자료이며 실제 제품 정보가 아니다."
+      ]
+    }
+  ],
+  "artifacts": [],
+  "coverage": [
+    {
+      "target": "Atlas Notes",
+      "status": "checked",
+      "checked_at": "2026-09-02T00:01:00Z",
+      "notes": "합성 fixture 확인"
+    },
+    {
+      "target": "Cedar Board",
+      "status": "checked",
+      "checked_at": "2026-09-02T00:02:00Z",
+      "notes": "합성 fixture에 새 릴리스 없음"
+    }
+  ],
+  "warnings": [],
+  "state_updates": {},
+  "metrics": {
+    "synthetic_targets_checked": 2,
+    "candidate_records": 1
+  }
+}

@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/researchops/generic-result.schema.json",
+  "title": "ResearchOps Generic Research Result v2",
+  "type": "object",
+  "required": ["status", "summary", "records"],
+  "properties": {
+    "status": {
+      "enum": ["success", "no_updates", "partial", "needs_attention"]
+    },
+    "summary": {"type": "string"},
+    "records": {
+      "type": "array",
+      "items": {"type": "object", "additionalProperties": true}
+    },
+    "artifacts": {
+      "$comment": "Optional metadata remains non-blocking at this Research envelope. Authoring tools may lint an array with #/$defs/artifactRequests; ArtifactAcquirer separately enforces path, source, association, and byte safety before any file enters Compose. Do not attach this lint definition to the envelope and thereby reject legacy optional metadata."
+    },
+    "coverage": {},
+    "warnings": {},
+    "state_updates": {},
+    "metrics": {}
+  },
+  "$comment": "This research-only schema is intentionally just the blocking envelope. Optional artifacts, coverage, warnings, state_updates, metrics, and business detail may be linted separately, but malformed optional data is normalized or quarantined with a warning and never causes record-only silent deletion. The application MUST NOT use this contract to re-evaluate factual relevance. Recipient-group selection and message composition occur later and belong to composition-result.schema.json.",
+  "additionalProperties": true,
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "cardragPdfSource": {
+      "type": "object",
+      "required": ["kind", "connection_id", "document_id", "issuer", "product_code", "sha256", "size_bytes"],
+      "properties": {
+        "kind": {"const": "cardrag_pdf"},
+        "connection_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$"},
+        "document_id": {"type": "string", "pattern": "^doc_[a-f0-9]{64}$"},
+        "issuer": {"type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[^\\u0000-\\u0020\\u007f]+$"},
+        "product_code": {"type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[^\\u0000-\\u0020\\u007f]+$"},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "size_bytes": {"type": "integer", "minimum": 1}
+      },
+      "additionalProperties": false,
+      "$comment": "Values come from the source descriptor; never invent a document ID, hash, or size. The connection ID resolves only in protected application settings. URLs, headers, bearer tokens, and token file paths are forbidden in this descriptor."
+    },
+    "officialImageSource": {
+      "type": "object",
+      "required": ["kind", "url"],
+      "properties": {
+        "kind": {"const": "official_image"},
+        "url": {"type": "string", "format": "uri", "pattern": "^https://", "maxLength": 8192}
+      },
+      "additionalProperties": false,
+      "$comment": "Request form only. The application checks the exact official host and every destination/redirect, validates PNG/JPEG/GIF bytes, and generates a sanitized URL plus url_sha256 for the immutable Compose/report source. No worker-supplied headers or credentials are accepted."
+    },
+    "artifactSource": {
+      "oneOf": [
+        {"type": "null"},
+        {"$ref": "#/$defs/cardragPdfSource"},
+        {"$ref": "#/$defs/officialImageSource"}
+      ]
+    },
+    "artifactRequest": {
+      "type": "object",
+      "required": ["path"],
+      "properties": {
+        "artifact_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+        "path": {"type": "string", "minLength": 1, "maxLength": 1024},
+        "role": {"enum": ["attachment", "inline_image", "evidence"], "default": "evidence"},
+        "scope": {"enum": ["record", "run", "legacy"]},
+        "record_ids": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
+        "declared_status": {"type": "string", "maxLength": 64},
+        "status": {"type": "string", "maxLength": 64},
+        "mime_type": {"type": "string", "minLength": 1},
+        "filename": {"type": "string", "minLength": 1, "maxLength": 255},
+        "cid": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._@+-]{0,254}$"},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "size_bytes": {"type": "integer", "minimum": 0},
+        "source": {"$ref": "#/$defs/artifactSource"},
+        "derived_from": {
+          "type": "array", "minItems": 1, "maxItems": 64, "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+          "description": "Current Research acquisition IDs used as derivative inputs. The application resolves these to verified original hashes; unknown, failed, or foreign receipts are rejected."
+        },
+        "on_failure": {"enum": ["continue", "hold"], "default": "continue"},
+        "announce_missing": {"type": "boolean", "default": false}
+      },
+      "allOf": [
+        {
+          "if": {"required": ["source"], "properties": {"source": {"type": "object"}}},
+          "then": {
+            "required": ["record_ids"],
+            "properties": {"record_ids": {"minItems": 1}, "scope": {"const": "record"}}
+          }
+        },
+        {
+          "if": {"required": ["source"], "properties": {"source": {"type": "object", "required": ["kind"], "properties": {"kind": {"const": "cardrag_pdf"}}}}},
+          "then": {"required": ["role", "mime_type"], "properties": {"role": {"const": "attachment"}, "mime_type": {"const": "application/pdf"}}}
+        },
+        {
+          "if": {"required": ["scope"], "properties": {"scope": {"const": "run"}}},
+          "then": {"properties": {"role": {"enum": ["attachment", "evidence"]}, "source": {"type": "null"}, "record_ids": {"maxItems": 0}}}
+        }
+      ],
+      "additionalProperties": true,
+      "$comment": "This optional authoring definition preserves unrelated legacy artifact metadata. Runtime additionally requires canonical safe paths (UTF-8 byte limits), existing record IDs, valid scope, unique IDs/paths, and verified bytes. Missing source means an already-created local Research artifact; it does not authorize a download. Explicit run scope permits local attachment or evidence, with absent/null source and absent/empty record_ids. Evidence is archived and never added to Compose media."
+    },
+    "artifactRequests": {"type": "array", "maxItems": 64, "items": {"$ref": "#/$defs/artifactRequest"}}
+  }
+}

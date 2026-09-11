@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/researchops/artifact-manifest.schema.json",
+  "title": "ResearchOps Archived Artifact Index v2",
+  "type": "object",
+  "required": ["run_id", "task_id", "run_manifest", "artifacts"],
+  "properties": {
+    "run_id": {"type": "string", "minLength": 1},
+    "task_id": {"type": "string", "pattern": "^[a-z][a-z0-9-]{1,63}$"},
+    "run_manifest": {
+      "type": "object",
+      "required": ["relative_path", "sha256"],
+      "properties": {
+        "relative_path": {
+          "$ref": "#/$defs/relativePath",
+          "$comment": "Path relative to the immutable run archive root."
+        },
+        "sha256": {"$ref": "#/$defs/sha256"}
+      },
+      "additionalProperties": false
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["relative_path", "role", "sha256", "size_bytes", "mime_type"],
+        "properties": {
+          "relative_path": {
+            "$ref": "#/$defs/relativePath",
+            "$comment": "Path relative to the immutable run archive root."
+          },
+          "role": {
+            "enum": [
+              "evidence",
+              "inline_image",
+              "attachment",
+              "source_snapshot",
+              "research_result",
+              "composition_input",
+              "composition_result",
+              "composed_html",
+              "composed_text",
+              "delivery_request",
+              "delivery_receipt",
+              "validation_report",
+              "log",
+              "other"
+            ]
+          },
+          "logical_name": {"type": ["string", "null"]},
+          "sha256": {"$ref": "#/$defs/sha256"},
+          "size_bytes": {"type": "integer", "minimum": 0},
+          "mime_type": {"type": "string", "minLength": 1}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "$comment": "This is a pure immutable archive index. Run, composition, handoff, and receipt state live only in run-manifest.json, so they cannot drift across two ledgers. Deterministic cross-artifact validation MUST require every path to name a regular archived file whose bytes match sha256 and size, require role-appropriate MIME types, and require unique relative paths. The delivery_receipt item points to the exact original receipt whose trust decision and identity summary are recorded in the run manifest.",
+  "$defs": {
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+    },
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+  },
+  "additionalProperties": false
+}

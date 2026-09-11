@@ -1,0 +1,12 @@
+[Unit]
+Description=Run ResearchOps scheduler every minute
+
+[Timer]
+OnBootSec=45s
+OnUnitActiveSec=60s
+AccuracySec=10s
+Persistent=true
+Unit=researchops-scheduler.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,610 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/researchops/run-manifest.schema.json",
+  "title": "ResearchOps Run Manifest v2",
+  "$comment": "Immutable snapshot at run archive publication. Later built-in SMTP attempts and local receipts are append-only evidence outside this archive; the database provides current delivery state. Legacy sent/accepted fields are retained only for reading historical fixtures, not as proof of SMTP acceptance.",
+  "type": "object",
+  "required": [
+    "run_id",
+    "task_id",
+    "status",
+    "phase",
+    "attempt",
+    "result_outcome",
+    "composition",
+    "handoff"
+  ],
+  "properties": {
+    "run_id": {"type": "string", "minLength": 1},
+    "task_id": {"type": "string", "pattern": "^[a-z][a-z0-9-]{1,63}$"},
+    "status": {
+      "enum": ["queued", "running", "awaiting_receipt", "succeeded", "failed", "timed_out", "cancelled", "needs_attention"]
+    },
+    "phase": {
+      "enum": [
+        "queued",
+        "preflight",
+        "research",
+        "validate",
+        "dedupe",
+        "compose",
+        "validate_message",
+        "handoff",
+        "finalize"
+      ]
+    },
+    "attempt": {
+      "type": "integer",
+      "minimum": 0,
+      "$comment": "A newly queued run has attempt=0. Each initial or stale-recovery claim increments it atomically."
+    },
+    "trigger_type": {"type": "string"},
+    "task_hash": {"anyOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]},
+    "scheduled_for": {"type": ["string", "null"], "format": "date-time"},
+    "started_at": {"type": ["string", "null"], "format": "date-time"},
+    "finished_at": {"type": ["string", "null"], "format": "date-time"},
+    "last_heartbeat_at": {"type": ["string", "null"], "format": "date-time"},
+    "last_progress_at": {"type": ["string", "null"], "format": "date-time"},
+    "no_progress_timeout_seconds": {"type": ["integer", "null"], "minimum": 1},
+    "result": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "$comment": "When present, this path is relative to the immutable run archive root."
+    },
+    "result_outcome": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": {
+          "enum": ["pending", "not_produced", "success", "no_updates", "partial", "needs_attention", "invalid"]
+        },
+        "record_count": {
+          "type": "integer",
+          "minimum": 0,
+          "$comment": "Count of Research records that passed the minimum whole-candidate technical contract before any explicit exact dedupe. Individual records are never silently dropped."
+        },
+        "reportable_record_count": {
+          "type": "integer",
+          "minimum": 0,
+          "$comment": "Count in the immutable composition input after any explicitly enabled verified-sent exact dedupe and explicit task policy. Changed or ambiguous records remain."
+        }
+      },
+      "$comment": "Research results contain research data only. Recipient-group selection occurs after the minimum technical gate and any explicit conservative exact dedupe in the Compose invocation.",
+      "additionalProperties": false
+    },
+    "composition": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": {"enum": ["pending", "not_produced", "validated", "invalid"]},
+        "revision": {"type": "integer", "minimum": 1},
+        "recipient_group_id": {"$ref": "#/$defs/groupId"},
+        "recipient_group_reason": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "subject": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 998,
+          "pattern": "^[^\\r\\n]+$"
+        },
+        "html_path": {
+          "$ref": "#/$defs/relativePath",
+          "$comment": "Path returned by Codex relative to the winning Compose phase output root; the artifact index identifies the immutable archived copy."
+        },
+        "text_path": {
+          "$ref": "#/$defs/relativePath",
+          "$comment": "Path returned by Codex relative to the winning Compose phase output root; the artifact index identifies the immutable archived copy."
+        },
+        "included_record_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "validation_errors": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1}
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {"status": {"const": "validated"}},
+            "required": ["status"]
+          },
+          "then": {
+            "required": [
+              "recipient_group_id",
+              "recipient_group_reason",
+              "revision",
+              "subject",
+              "html_path",
+              "text_path",
+              "included_record_ids"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {"status": {"const": "invalid"}},
+            "required": ["status"]
+          },
+          "then": {"required": ["revision", "validation_errors"]}
+        }
+      ],
+      "additionalProperties": false
+    },
+    "failure": {"type": ["object", "null"], "additionalProperties": true},
+    "codex": {"type": "object", "additionalProperties": true},
+    "workspace": {
+      "type": "object",
+      "required": ["task_workspace_id", "generation", "attempt_root", "fencing_token", "child_group_ids"],
+      "properties": {
+        "task_workspace_id": {"type": "string", "minLength": 1},
+        "generation": {"type": "integer", "minimum": 1},
+        "attempt_root": {
+          "$ref": "#/$defs/relativePath",
+          "$comment": "Path relative to the persistent task workspace root."
+        },
+        "fencing_token": {"type": "string", "minLength": 8},
+        "child_group_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        }
+      },
+      "additionalProperties": false
+    },
+    "handoff": {
+      "type": "object",
+      "required": ["mode", "status"],
+      "properties": {
+        "message_type": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{1,31}$",
+          "not": {"const": "system_alert"}
+        },
+        "mode": {"enum": ["disabled", "dry_run", "handoff"]},
+        "status": {
+          "enum": [
+            "not_requested",
+            "pending",
+            "prepared",
+            "published",
+            "acknowledged",
+            "failed",
+            "uncertain",
+            "skipped"
+          ]
+        },
+        "recipient_group_id": {"$ref": "#/$defs/groupId"},
+        "message_revision": {"type": "integer", "minimum": 1},
+        "handoff_id": {"type": "string", "minLength": 1, "maxLength": 255},
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 255,
+          "pattern": "^[A-Za-z0-9._:-]+$"
+        },
+        "delivery_request_path": {
+          "$ref": "#/$defs/relativePath",
+          "$comment": "Path relative to the immutable run archive root. Paths inside the request use the separate handoff package root."
+        },
+        "delivery_request_sha256": {"$ref": "#/$defs/sha256"},
+        "published_at": {"type": "string", "format": "date-time"},
+        "external_receipt_id": {"type": "string", "minLength": 1},
+        "acknowledged_at": {"type": "string", "format": "date-time"},
+        "external_delivery_status": {"enum": ["accepted", "sent", "failed", "uncertain"]},
+        "receipt_path": {
+          "$ref": "#/$defs/relativePath",
+          "$comment": "Path to original receipt bytes relative to the immutable run archive root."
+        },
+        "receipt_sha256": {"$ref": "#/$defs/sha256"},
+        "receipt_trust_status": {"enum": ["verified", "rejected"]},
+        "decision_reason": {"type": "string", "minLength": 1}
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {"enum": ["prepared", "published", "acknowledged", "uncertain"]}
+            },
+            "required": ["status"]
+          },
+          "then": {
+            "required": [
+              "message_type",
+              "mode",
+              "recipient_group_id",
+              "message_revision",
+              "handoff_id",
+              "idempotency_key",
+              "delivery_request_path",
+              "delivery_request_sha256"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {"status": {"enum": ["published", "acknowledged", "uncertain"]}},
+            "required": ["status"]
+          },
+          "then": {
+            "required": ["published_at"],
+            "properties": {"mode": {"const": "handoff"}}
+          }
+        },
+        {
+          "if": {
+            "properties": {"status": {"const": "acknowledged"}},
+            "required": ["status"]
+          },
+          "then": {
+            "required": [
+              "external_receipt_id",
+              "acknowledged_at",
+              "external_delivery_status",
+              "receipt_path",
+              "receipt_sha256",
+              "receipt_trust_status"
+            ],
+            "properties": {"receipt_trust_status": {"const": "verified"}}
+          }
+        },
+        {
+          "if": {
+            "required": ["external_delivery_status"]
+          },
+          "then": {
+            "properties": {"status": {"const": "acknowledged"}}
+          }
+        },
+        {
+          "if": {
+            "properties": {"mode": {"const": "disabled"}},
+            "required": ["mode"]
+          },
+          "then": {
+            "properties": {"status": {"enum": ["not_requested", "skipped"]}}
+          }
+        },
+        {
+          "if": {
+            "properties": {"mode": {"const": "dry_run"}},
+            "required": ["mode"]
+          },
+          "then": {
+            "properties": {"status": {"enum": ["pending", "prepared", "failed", "skipped"]}}
+          }
+        }
+      ],
+      "$comment": "published means only that the immutable delivery request reached the external handoff boundary and moves the run to awaiting_receipt without retaining a worker. acknowledged requires a verified immutable receipt; external_delivery_status distinguishes accepted from actual sent, failed, or uncertain delivery. This manifest intentionally has no local handoff status named sent, recipient addresses, group membership, sender profile, or recipient counts. Deterministic cross-artifact validation MUST require composition.recipient_group_id == handoff.recipient_group_id and composition.revision == handoff.message_revision for every handoff state that carries a request identity, and MUST match the receipt's handoff_id, idempotency_key, and delivery_request_sha256.",
+      "additionalProperties": false
+    },
+    "alerting": {
+      "type": "object",
+      "required": ["status", "attempt_count"],
+      "properties": {
+        "status": {
+          "enum": ["not_requested", "pending", "published", "acknowledged", "failed", "uncertain", "skipped"]
+        },
+        "event": {
+          "type": ["string", "null"],
+          "enum": ["failed", "timed_out", "needs_attention", "handoff_uncertain", null]
+        },
+        "recipient_group_id": {"$ref": "#/$defs/groupId"},
+        "attempt_count": {"type": "integer", "minimum": 0},
+        "external_receipt_id": {"type": "string", "minLength": 1}
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {"status": {"enum": ["pending", "published", "acknowledged", "failed", "uncertain"]}},
+            "required": ["status"]
+          },
+          "then": {"required": ["event", "recipient_group_id"]}
+        },
+        {
+          "if": {
+            "properties": {"status": {"const": "acknowledged"}},
+            "required": ["status"]
+          },
+          "then": {"required": ["external_receipt_id"]}
+        }
+      ],
+      "$comment": "System-alert handoff is separate from the task report, uses one fixed administrator group signal, and never derives its group from composition output.",
+      "additionalProperties": false
+    },
+    "paths": {"type": "object", "additionalProperties": true},
+    "artifacts": {
+      "type": "array",
+      "items": {"type": "object", "additionalProperties": true}
+    },
+    "warnings": {"type": "array", "items": {"type": "string"}}
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {"attempt": {"type": "integer", "minimum": 1}},
+        "required": ["attempt"]
+      },
+      "then": {"required": ["workspace"]}
+    },
+    {
+      "if": {
+        "properties": {
+          "handoff": {
+            "properties": {
+              "status": {"enum": ["prepared", "published", "acknowledged", "failed", "uncertain"]}
+            },
+            "required": ["status"]
+          }
+        },
+        "required": ["handoff"]
+      },
+      "then": {
+        "properties": {
+          "result_outcome": {
+            "properties": {"status": {"enum": ["success", "no_updates", "partial"]}}
+          },
+          "composition": {
+            "properties": {"status": {"const": "validated"}}
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "composition": {"properties": {"status": {"const": "invalid"}}, "required": ["status"]}
+        },
+        "required": ["composition"]
+      },
+      "then": {
+        "properties": {"handoff": {"properties": {"status": {"const": "not_requested"}}}}
+      }
+    },
+    {
+      "if": {
+        "properties": {"status": {"const": "succeeded"}},
+        "required": ["status"]
+      },
+      "then": {
+        "properties": {
+          "phase": {"const": "finalize"},
+          "result_outcome": {
+            "properties": {"status": {"enum": ["success", "no_updates", "partial"]}}
+          },
+          "composition": {
+            "properties": {"status": {"enum": ["validated", "not_produced"]}}
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "handoff": {
+            "properties": {
+              "status": {"const": "acknowledged"},
+              "external_delivery_status": {"const": "sent"}
+            },
+            "required": ["status", "external_delivery_status"]
+          }
+        },
+        "required": ["handoff"]
+      },
+      "then": {"properties": {"status": {"const": "succeeded"}}}
+    },
+    {
+      "if": {
+        "properties": {
+          "handoff": {
+            "properties": {
+              "status": {"const": "acknowledged"},
+              "external_delivery_status": {"const": "accepted"}
+            },
+            "required": ["status", "external_delivery_status"]
+          }
+        },
+        "required": ["handoff"]
+      },
+      "then": {"properties": {"status": {"const": "awaiting_receipt"}}}
+    },
+    {
+      "if": {
+        "properties": {
+          "handoff": {
+            "properties": {
+              "status": {"const": "acknowledged"},
+              "external_delivery_status": {"const": "failed"}
+            },
+            "required": ["status", "external_delivery_status"]
+          }
+        },
+        "required": ["handoff"]
+      },
+      "then": {"properties": {"status": {"enum": ["failed", "needs_attention"]}}}
+    },
+    {
+      "if": {
+        "properties": {
+          "handoff": {
+            "properties": {
+              "status": {"const": "acknowledged"},
+              "external_delivery_status": {"const": "uncertain"}
+            },
+            "required": ["status", "external_delivery_status"]
+          }
+        },
+        "required": ["handoff"]
+      },
+      "then": {"properties": {"status": {"const": "needs_attention"}}}
+    },
+    {
+      "if": {
+        "properties": {"handoff": {"properties": {"status": {"const": "failed"}}, "required": ["status"]}},
+        "required": ["handoff"]
+      },
+      "then": {"properties": {"status": {"enum": ["failed", "needs_attention"]}}}
+    },
+    {
+      "if": {
+        "properties": {"handoff": {"properties": {"status": {"const": "uncertain"}}, "required": ["status"]}},
+        "required": ["handoff"]
+      },
+      "then": {"properties": {"status": {"const": "needs_attention"}}}
+    },
+    {
+      "if": {
+        "properties": {"status": {"const": "queued"}},
+        "required": ["status"]
+      },
+      "then": {
+        "properties": {
+          "phase": {"const": "queued"},
+          "attempt": {"const": 0},
+          "result_outcome": {
+            "properties": {"status": {"const": "pending"}}
+          },
+          "composition": {
+            "properties": {"status": {"const": "pending"}}
+          },
+          "handoff": {
+            "properties": {"status": {"enum": ["not_requested", "pending"]}}
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"status": {"const": "running"}},
+        "required": ["status"]
+      },
+      "then": {
+        "properties": {"attempt": {"type": "integer", "minimum": 1}}
+      }
+    },
+    {
+      "if": {
+        "properties": {"handoff": {"properties": {"status": {"const": "published"}}, "required": ["status"]}},
+        "required": ["handoff"]
+      },
+      "then": {
+        "properties": {
+          "status": {"const": "awaiting_receipt"},
+          "phase": {"const": "finalize"}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"status": {"const": "awaiting_receipt"}},
+        "required": ["status"]
+      },
+      "then": {
+        "properties": {
+          "phase": {"const": "finalize"},
+          "attempt": {"type": "integer", "minimum": 1},
+          "handoff": {
+            "oneOf": [
+              {
+                "properties": {
+                  "mode": {"const": "handoff"},
+                  "status": {"const": "published"}
+                },
+                "required": ["mode", "status"]
+              },
+              {
+                "properties": {
+                  "mode": {"const": "handoff"},
+                  "status": {"const": "acknowledged"},
+                  "external_delivery_status": {"const": "accepted"}
+                },
+                "required": ["mode", "status", "external_delivery_status"]
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {"const": "succeeded"},
+          "handoff": {"properties": {"mode": {"const": "handoff"}}, "required": ["mode"]}
+        },
+        "required": ["status", "handoff"]
+      },
+      "then": {
+        "properties": {
+          "phase": {"const": "finalize"},
+          "handoff": {
+            "oneOf": [
+              {
+                "properties": {
+                  "status": {"const": "acknowledged"},
+                  "external_delivery_status": {"const": "sent"}
+                },
+                "required": ["status", "external_delivery_status"]
+              },
+              {
+                "properties": {"status": {"const": "skipped"}},
+                "required": ["status"]
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {"const": "succeeded"},
+          "handoff": {"properties": {"mode": {"const": "dry_run"}}, "required": ["mode"]}
+        },
+        "required": ["status", "handoff"]
+      },
+      "then": {
+        "properties": {
+          "phase": {"const": "finalize"},
+          "handoff": {
+            "properties": {"status": {"enum": ["prepared", "skipped"]}}
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {"const": "succeeded"},
+          "handoff": {"properties": {"mode": {"const": "disabled"}}, "required": ["mode"]}
+        },
+        "required": ["status", "handoff"]
+      },
+      "then": {
+        "properties": {
+          "phase": {"const": "finalize"},
+          "handoff": {
+            "properties": {"status": {"enum": ["not_requested", "skipped"]}}
+          }
+        }
+      }
+    }
+  ],
+  "$comment": "The deterministic cross-artifact validator MUST compare the current task hash, composition output, delivery request, and manifest: the composed and handed-off recipient_group_id values must match exactly, all referenced file hashes must match immutable bytes, and no local state may claim external delivery from publication or an accepted-only receipt. This does not judge research facts or prose meaning. For a published report, Run status may become succeeded and ReportedItem may be committed only after a verified receipt records external_delivery_status=sent; a policy-skipped run may succeed without a reported commit.",
+  "$defs": {
+    "groupId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{1,63}$"
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  },
+  "additionalProperties": false
+}

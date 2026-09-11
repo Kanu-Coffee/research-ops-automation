@@ -1,0 +1,20 @@
+# 외부 Delivery Gateway 측 공개 예시다. ResearchOps와 Codex는 이 파일을 로드하지 않는다.
+version: 1
+
+routes:
+  - message_type: release_digest
+    recipient_group_id: release-team
+    mail_profile_id: release-notifications
+    enabled: false
+
+  - message_type: release_digest
+    recipient_group_id: release-stakeholders
+    mail_profile_id: release-notifications
+    enabled: false
+
+  - message_type: system_alert
+    recipient_group_id: researchops-admins
+    mail_profile_id: researchops-alerts
+    enabled: false
+
+on_missing_route: reject

@@ -1,0 +1,66 @@
+{
+  "run_id": "run_01",
+  "task_id": "software-releases",
+  "run_manifest": {
+    "relative_path": "sample-run-succeeded.json",
+    "sha256": "ba06ad95fbc088e08ea15f231c8f1b520b3cd65f924488109c33b56b15a63e0c"
+  },
+  "artifacts": [
+    {
+      "relative_path": "sample-result.json",
+      "role": "research_result",
+      "logical_name": "software_releases_research_result",
+      "sha256": "a59078119f3fd236de1837ef895312d0c6364ddccac10fa9857b534e7ceea1af",
+      "size_bytes": 1480,
+      "mime_type": "application/json"
+    },
+    {
+      "relative_path": "sample-compose-input.json",
+      "role": "composition_input",
+      "logical_name": "software_releases_compose_input",
+      "sha256": "58e9ee38bcc9a03661c59e199dd6744666091d4f15f17f090460a0f44ce8b06f",
+      "size_bytes": 1675,
+      "mime_type": "application/json"
+    },
+    {
+      "relative_path": "sample-composition-result.json",
+      "role": "composition_result",
+      "logical_name": "software_releases_composition_result",
+      "sha256": "17ee0c4c1dbf957f4ef1e4c69d33b9106fecfa33a7a147ed5753bf362ad2216f",
+      "size_bytes": 346,
+      "mime_type": "application/json"
+    },
+    {
+      "relative_path": "sample-email-preview.html",
+      "role": "composed_html",
+      "logical_name": "email_html",
+      "sha256": "868685622c800b55343fbf772f04fdbec5790149c2f2173e988f2b7cc95676db",
+      "size_bytes": 1082,
+      "mime_type": "text/html"
+    },
+    {
+      "relative_path": "sample-email-preview.txt",
+      "role": "composed_text",
+      "logical_name": "email_text",
+      "sha256": "81f3ebfe1966625b3a0cdce125e121a8cd068d20c19f50fcbdbc11648c8dd0de",
+      "size_bytes": 408,
+      "mime_type": "text/plain"
+    },
+    {
+      "relative_path": "sample-delivery-request.json",
+      "role": "delivery_request",
+      "logical_name": "delivery_request",
+      "sha256": "d695e5b609d45104a19d1a69b7766a5b6ec995611e1a785d7f514e22c5f1df06",
+      "size_bytes": 924,
+      "mime_type": "application/json"
+    },
+    {
+      "relative_path": "sample-receipt-sent.json",
+      "role": "delivery_receipt",
+      "logical_name": "delivery_receipt_sent",
+      "sha256": "617f6dd08f3e815ff6aff7a42f4dcff81776e719d583bffbeb55a646508a6b1f",
+      "size_bytes": 511,
+      "mime_type": "application/json"
+    }
+  ]
+}

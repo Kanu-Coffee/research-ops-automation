@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/researchops/composition-result.schema.json",
+  "title": "ResearchOps Composition Result (legacy ID or catalog name)",
+  "type": "object",
+  "required": [
+    "recipient_group_reason",
+    "subject",
+    "html_path",
+    "text_path",
+    "included_record_ids"
+  ],
+  "properties": {
+    "recipient_group_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{1,63}$",
+      "$comment": "A task-specific composition schema MUST replace or narrow this property with a direct enum exactly matching task.delivery.allowed_recipient_group_ids. Exactly one opaque group id is selected."
+    },
+    "recipient_group_reason": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "subject": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 998,
+      "pattern": "^[^\\r\\n]+$"
+    },
+    "html_path": {
+      "$ref": "#/$defs/relativePath"
+    },
+    "text_path": {
+      "$ref": "#/$defs/relativePath"
+    },
+    "included_record_ids": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "recipient_group_name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    }
+  },
+  "$comment": "The task routing mode selects one opaque ID for legacy_ids or exactly one registered display name for catalog_name. Name selection resolves uniquely against the immutable v3 input, never current display names. The app preserves the original result and message bytes and audits the resolved fixed ID.",
+  "$defs": {
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+    }
+  },
+  "additionalProperties": false,
+  "oneOf": [
+    {
+      "required": [
+        "recipient_group_id"
+      ],
+      "not": {
+        "required": [
+          "recipient_group_name"
+        ]
+      }
+    },
+    {
+      "required": [
+        "recipient_group_name"
+      ],
+      "not": {
+        "required": [
+          "recipient_group_id"
+        ]
+      }
+    }
+  ]
+}

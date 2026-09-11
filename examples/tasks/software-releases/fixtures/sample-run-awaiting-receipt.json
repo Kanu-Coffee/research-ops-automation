@@ -1,0 +1,50 @@
+{
+  "run_id": "run_01",
+  "task_id": "software-releases",
+  "status": "awaiting_receipt",
+  "phase": "finalize",
+  "attempt": 1,
+  "task_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "workspace": {
+    "task_workspace_id": "software-releases",
+    "generation": 1,
+    "attempt_root": ".runs/run_01/attempt-1",
+    "fencing_token": "fence-run-01-attempt-1",
+    "child_group_ids": [
+      "research-run-01-a1",
+      "compose-run-01-a1"
+    ]
+  },
+  "result": "sample-result.json",
+  "result_outcome": {
+    "status": "success",
+    "record_count": 1,
+    "reportable_record_count": 1
+  },
+  "composition": {
+    "status": "validated",
+    "revision": 1,
+    "recipient_group_id": "release-team",
+    "recipient_group_reason": "preview 릴리스가 없는 일상 업데이트이므로 release-team을 선택함",
+    "subject": "[가상 소프트웨어 릴리스] 2026-09-02 업데이트",
+    "html_path": "email.html",
+    "text_path": "email.txt",
+    "included_record_ids": [
+      "atlas-notes::2.4.0"
+    ]
+  },
+  "handoff": {
+    "mode": "handoff",
+    "status": "published",
+    "message_type": "release_digest",
+    "recipient_group_id": "release-team",
+    "message_revision": 1,
+    "handoff_id": "handoff_run_01",
+    "idempotency_key": "researchops:run_01:report:v1",
+    "delivery_request_path": "sample-delivery-request.json",
+    "delivery_request_sha256": "d695e5b609d45104a19d1a69b7766a5b6ec995611e1a785d7f514e22c5f1df06",
+    "published_at": "2026-09-02T00:05:01Z"
+  },
+  "artifacts": [],
+  "warnings": []
+}

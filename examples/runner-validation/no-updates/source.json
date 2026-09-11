@@ -1,0 +1,18 @@
+{
+  "synthetic": true,
+  "comparison": "report only changed version values",
+  "targets": [
+    {
+      "target": "source-alpha",
+      "previous_version": "v1",
+      "current_version": "v1",
+      "checked": true
+    },
+    {
+      "target": "source-beta",
+      "previous_version": "v3",
+      "current_version": "v3",
+      "checked": true
+    }
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "recipient_group_id",
+    "recipient_group_reason",
+    "subject",
+    "html_path",
+    "text_path",
+    "included_record_ids"
+  ],
+  "properties": {
+    "recipient_group_id": {
+      "enum": [
+        "sample-review-team"
+      ]
+    },
+    "recipient_group_reason": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "subject": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 998,
+      "pattern": "^[^\\r\\n]+$"
+    },
+    "html_path": {
+      "const": "email.html"
+    },
+    "text_path": {
+      "const": "email.txt"
+    },
+    "included_record_ids": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  },
+  "additionalProperties": false
+}

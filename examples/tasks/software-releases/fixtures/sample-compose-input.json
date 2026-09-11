@@ -1,0 +1,59 @@
+{
+  "schema_version": 2,
+  "task_id": "software-releases",
+  "run_id": "run_01",
+  "task_version_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "composition_revision": 1,
+  "run": {
+    "scheduled_for": "2026-09-02T00:00:00Z",
+    "timezone": "Asia/Seoul",
+    "local_date": "2026-09-02",
+    "local_date_display": "2026.09.02"
+  },
+  "result": {
+    "status": "success",
+    "summary": "전달할 합성 소프트웨어 릴리스 1건",
+    "warnings": []
+  },
+  "coverage": {
+    "complete": true,
+    "expected_target_count": 2,
+    "completed_target_count": 2,
+    "issues": []
+  },
+  "allowed_recipient_group_ids": [
+    "release-team",
+    "release-stakeholders"
+  ],
+  "reportable_records": [
+    {
+      "record_id": "atlas-notes::2.4.0",
+      "record_type": "software_release",
+      "publisher": "Atlas Studio (fictional)",
+      "product_name": "Atlas Notes",
+      "release_version": "2.4.0",
+      "release_channel": "stable",
+      "release_date": "2026-09-01",
+      "changes": [
+        {
+          "title": "노트 내보내기 추가",
+          "details": "사용자가 선택한 노트를 UTF-8 텍스트 파일로 내보낸다."
+        }
+      ],
+      "sources": [
+        {
+          "type": "release_notes",
+          "url": "https://example.org/atlas-notes/releases/2.4.0",
+          "title": "Atlas Notes 2.4.0 — fictional release notes",
+          "published_date": "2026-09-01",
+          "official": true
+        }
+      ],
+      "notes": [
+        "공개 문서·회귀 테스트 전용 합성 자료이며 실제 제품 정보가 아니다."
+      ]
+    }
+  ],
+  "inline_artifacts": [],
+  "attachments": []
+}

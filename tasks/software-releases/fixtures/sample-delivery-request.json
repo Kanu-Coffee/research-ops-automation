@@ -1,0 +1,28 @@
+{
+  "schema_version": 2,
+  "handoff_id": "handoff_run_01",
+  "idempotency_key": "researchops:run_01:report:v1",
+  "task_id": "software-releases",
+  "run_id": "run_01",
+  "task_version_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "message_revision": 1,
+  "message_type": "release_digest",
+  "recipient_group_id": "release-team",
+  "subject": "[가상 소프트웨어 릴리스] 2026-09-02 업데이트",
+  "body": {
+    "html": {
+      "path": "sample-email-preview.html",
+      "sha256": "868685622c800b55343fbf772f04fdbec5790149c2f2173e988f2b7cc95676db",
+      "media_type": "text/html",
+      "size_bytes": 1082
+    },
+    "text": {
+      "path": "sample-email-preview.txt",
+      "sha256": "81f3ebfe1966625b3a0cdce125e121a8cd068d20c19f50fcbdbc11648c8dd0de",
+      "media_type": "text/plain",
+      "size_bytes": 408
+    }
+  },
+  "attachments": [],
+  "created_at": "2026-09-02T00:05:00Z"
+}

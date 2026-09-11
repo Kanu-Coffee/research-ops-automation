@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.org/researchops/software-releases-composition-record.schema.json",
+  "title": "Software Release Lossless Composition Record",
+  "type": "object",
+  "required": [
+    "record_id",
+    "publisher",
+    "product_name",
+    "release_channel"
+  ],
+  "properties": {
+    "record_id": {"type": "string", "minLength": 1},
+    "publisher": {"type": "string", "minLength": 1},
+    "product_name": {"type": "string", "minLength": 1},
+    "release_channel": {"enum": ["stable", "preview", "unknown"]}
+  },
+  "$comment": "The application adds record_id and carries every accepted source record property forward. This hard schema checks only stable identity and the field required for recipient-group branching. Optional detail is linted as a warning rather than removed or used to reject one record, and additional source properties remain available to Compose.",
+  "additionalProperties": true
+}

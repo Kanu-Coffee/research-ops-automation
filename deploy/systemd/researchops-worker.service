@@ -1,0 +1,40 @@
+[Unit]
+Description=ResearchOps durable research worker
+After=network-online.target
+Wants=network-online.target
+AssertPathExists=/etc/researchops/settings.yaml
+
+[Service]
+Type=simple
+User=researchops
+Group=researchops
+WorkingDirectory=/opt/researchops
+Environment=PYTHONUNBUFFERED=1
+Environment=TZ=Asia/Seoul
+Environment=RESEARCHOPS_ROOT=/opt/researchops
+Environment=RESEARCHOPS_CONFIG=/etc/researchops/settings.yaml
+ExecStart=/opt/researchops/.venv/bin/researchctl --config /etc/researchops/settings.yaml worker run --poll-interval 2 --concurrency 1
+UMask=0077
+StateDirectory=researchops
+StateDirectoryMode=0700
+RuntimeDirectory=researchops
+RuntimeDirectoryMode=0700
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+ReadWritePaths=/var/lib/researchops
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+RestrictSUIDSGID=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LockPersonality=yes
+KillMode=control-group
+TimeoutStopSec=45
+Delegate=memory pids
+ProtectControlGroups=no
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

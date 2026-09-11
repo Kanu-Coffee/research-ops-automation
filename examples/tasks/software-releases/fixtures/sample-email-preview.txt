@@ -1,0 +1,11 @@
+가상 소프트웨어 릴리스
+2026.09.02 · 신규 릴리스 1건 · 합성 학습용 예제
+
+Record: atlas-notes::2.4.0
+Atlas Notes 2.4.0
+발행 조직: Atlas Studio (fictional)
+릴리스 채널: stable
+출시일: 2026.09.01
+변경: 노트 내보내기 추가 — 선택한 노트를 UTF-8 텍스트 파일로 내보낸다.
+
+Atlas Notes와 Cedar Board 두 대상의 합성 자료 확인을 완료했다.

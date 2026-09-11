@@ -1,0 +1,2 @@
+# setuptools serializes this file in the sdist; preserve its canonical bytes.
+setup.cfg whitespace=-blank-at-eol,-blank-at-eof

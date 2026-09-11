@@ -1,0 +1,50 @@
+[Unit]
+Description=ResearchOps durable research worker (owned-root user deployment)
+AssertPathExists=@ROOT@/config/settings.yaml
+AssertPathExists=@ROOT@/current/.venv/bin/researchctl
+AssertPathIsDirectory=@ROOT@/data
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+Slice=app.slice
+WorkingDirectory=@ROOT@
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=TZ=Asia/Seoul
+Environment=RESEARCHOPS_ROOT=@ROOT@/current
+Environment=RESEARCHOPS_CONFIG=@ROOT@/config/settings.yaml
+ExecStart=@ROOT@/current/.venv/bin/researchctl --config @ROOT@/config/settings.yaml worker run --poll-interval 2 --concurrency 1
+# Current-host user hierarchy; fail startup if this unit's delegated root is absent
+# or not writable. Never modify app.slice, user@.service, or another unit's root.
+# Post is deliberate: Pre causes EBUSY when systemd transiently attaches the main
+# executor to this root before moving it into DelegateSubgroup=control.
+ExecStartPost=/bin/sh -ec 'echo +memory +pids > /sys/fs/cgroup/user.slice/user-%U.slice/user@%U.service/app.slice/%n/cgroup.subtree_control'
+UMask=0077
+NoNewPrivileges=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+# Codex/bwrap configures loopback in its own network namespace via NETLINK_ROUTE.
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+LimitCORE=0
+LimitNOFILE=4096
+TasksMax=256
+MemoryHigh=1G
+MemoryMax=2G
+MemorySwapMax=0
+KillMode=control-group
+TimeoutStopSec=45
+Delegate=memory pids
+# systemd >= 254: keep the delegated root empty for future runner subgroups.
+DelegateSubgroup=control
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=researchops-worker
+# No mount/user namespace directives: this host restricts generic unprivileged
+# user namespaces. These service limits do not complete RUNNER-BOUNDARY.
+
+[Install]
+WantedBy=default.target
