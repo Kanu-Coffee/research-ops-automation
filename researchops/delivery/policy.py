@@ -13,6 +13,28 @@ def sender_for_task_version(db, task_id, version_hash):
     return version.definition.delivery.get("sender_profile_id", "default")
 
 
+def recipient_visibility(task_def):
+    """Normalize and validate recipient visibility from a task definition or dict."""
+    if hasattr(task_def, "delivery"):
+        delivery = task_def.delivery or {}
+    elif isinstance(task_def, dict):
+        delivery = task_def.get("delivery") or {}
+    else:
+        delivery = {}
+    visibility = delivery.get("recipient_visibility", "to")
+    if visibility not in ("to", "bcc"):
+        raise DeliveryError(f"Invalid recipient_visibility: {visibility!r} (must be 'to' or 'bcc')")
+    return visibility
+
+
+def recipient_visibility_for_task_version(db, task_id, version_hash):
+    """Resolve recipient visibility from the immutable task version."""
+    version = TaskRepository(db).get_version(version_hash)
+    if not version or version.task_id != task_id:
+        raise DeliveryError("Invalid delivery task version")
+    return recipient_visibility(version.definition)
+
+
 def require_live(settings, config, sender_profile_id="default"):
     if settings.delivery.global_handoff_kill_switch is not False:
         raise DeliveryError("Global delivery kill switch is active")

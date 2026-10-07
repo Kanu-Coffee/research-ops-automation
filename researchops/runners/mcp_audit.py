@@ -166,8 +166,10 @@ def _regular_generated_file(path, root):
 def validate_agy_mcp_reads(trace, active_server_names, *, home_dir=None):
     """Validate observed generated-file accesses and annotate proven spill reads.
 
-    view_file and grep_search may target the same exact authorized generated
-    files. Directory searches and other generated-state accesses remain denied.
+    view_file, view_file_outline, grep_search, list_dir, and find_by_name may
+    target authorized MCP metadata directories and tool schemas.
+    view_file and grep_search may target exact authorized spill outputs in the
+    current conversation. Other generated-state accesses remain denied.
     An error-free, non-denied DONE call may have no inline output. A subsequent
     successful view_file of its exact, existing generated output establishes
     response evidence without changing the recorded provider success. This
@@ -230,17 +232,42 @@ def validate_agy_mcp_reads(trace, active_server_names, *, home_dir=None):
         if (not supplied.is_absolute() or str(supplied) != raw_path or ".." in supplied.parts or
                 "\\" in raw_path or any(ord(c) < 32 or ord(c) == 127 for c in raw_path)):
             raise ValueError("AGY_MCP_GENERATED_PATH_INVALID")
+        if target.is_relative_to(metadata):
+            if name not in {"view_file", "view_file_outline", "grep_search", "list_dir", "find_by_name"}:
+                raise ValueError("AGY_MCP_GENERATED_ACCESS_DENIED")
+            try:
+                assert_path_contained(target, metadata)
+            except (WorkspaceError, ValueError):
+                raise ValueError("AGY_MCP_GENERATED_FILE_UNSAFE") from None
+            parts = target.relative_to(metadata).parts
+            if not parts:
+                if name not in {"list_dir", "find_by_name"}:
+                    raise ValueError("AGY_MCP_GENERATED_FILE_UNSAFE")
+                continue
+            server_name = parts[0]
+            if server_name not in active or _safe_identifier(server_name) == "[redacted]":
+                raise ValueError("AGY_MCP_SCHEMA_PROVENANCE_INVALID")
+            if any(_safe_identifier(p) == "[redacted]" for p in parts):
+                raise ValueError("AGY_MCP_SCHEMA_PROVENANCE_INVALID")
+            if len(parts) == 1:
+                if name not in {"list_dir", "find_by_name"}:
+                    raise ValueError("AGY_MCP_GENERATED_FILE_UNSAFE")
+                info = target.lstat()
+                if not stat.S_ISDIR(info.st_mode) or stat.S_ISLNK(info.st_mode):
+                    raise ValueError("AGY_MCP_GENERATED_FILE_UNSAFE")
+                continue
+            if len(parts) == 2:
+                filename = parts[1]
+                valid_file = (filename == "instructions.md" or
+                              filename.endswith(".md") and _safe_identifier(filename[:-3]) != "[redacted]" or
+                              filename.endswith(".json") and _safe_identifier(filename[:-5]) != "[redacted]")
+                if not valid_file:
+                    raise ValueError("AGY_MCP_SCHEMA_PROVENANCE_INVALID")
+                _regular_generated_file(target, metadata)
+                continue
+            raise ValueError("AGY_MCP_SCHEMA_PROVENANCE_INVALID")
         if name not in {"view_file", "grep_search"}:
             raise ValueError("AGY_MCP_GENERATED_ACCESS_DENIED")
-        if target.is_relative_to(metadata):
-            parts = target.relative_to(metadata).parts
-            schema_file = (len(parts) == 2 and (parts[1] == "instructions.md" or
-                           parts[1].endswith(".json") and _safe_identifier(parts[1][:-5]) != "[redacted]"))
-            if (len(parts) != 2 or parts[0] not in active or _safe_identifier(parts[0]) == "[redacted]" or
-                    not schema_file):
-                raise ValueError("AGY_MCP_SCHEMA_PROVENANCE_INVALID")
-            _regular_generated_file(target, metadata)
-            continue
         source = outputs.get(target)
         if source is None or type(index) is not int or index <= source[0]:
             raise ValueError("AGY_MCP_SPILL_PROVENANCE_INVALID")

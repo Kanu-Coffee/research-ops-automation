@@ -20,7 +20,8 @@ def build_production_package(*, task_id: str, name: str, instructions: str,
                              email_spec_md: Optional[str] = None,
                              sender_profile_id: str = "default",
                              recipient_routing_mode: str = "legacy_ids",
-                             stage_settings: Optional[dict] = None) -> Dict[str, str]:
+                             stage_settings: Optional[dict] = None,
+                             recipient_visibility: str = "to") -> Dict[str, str]:
     if not isinstance(name, str) or not name.strip() or len(name) > 200:
         raise ValidationError("Task name must contain 1–200 characters")
     if not isinstance(instructions, str) or not instructions.strip() or len(instructions) > 100_000:
@@ -32,6 +33,8 @@ def build_production_package(*, task_id: str, name: str, instructions: str,
         raise ValidationError("Production tasks require Codex or Antigravity")
     if recipient_routing_mode not in {"legacy_ids", "catalog_name"}:
         raise ValidationError("Unknown recipient routing mode")
+    if recipient_visibility not in {"to", "bcc"}:
+        raise ValidationError("Unknown recipient visibility")
     if type(schedule_enabled) is not bool:
         raise ValidationError("Schedule enablement must be a boolean")
     if model is not None and (not isinstance(model, str) or len(model) > 200 or
@@ -63,6 +66,8 @@ def build_production_package(*, task_id: str, name: str, instructions: str,
         "state": {"dedupe": {"enabled": False}},
         "retention": {"run_days": 180, "artifact_days": 365, "log_days": 180},
     }
+    if recipient_visibility == "bcc":
+        config["delivery"]["recipient_visibility"] = "bcc"
     schema_base = {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object"}
     research_schema = {
         **schema_base, "required": ["status", "summary", "records"],

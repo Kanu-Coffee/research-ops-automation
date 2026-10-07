@@ -25,7 +25,7 @@ from researchops.runners.response_transport import (
 )
 from researchops.runners.launcher import IsolatedProcessLauncher
 from researchops.runners.native_mcp import inspect_native_mcp, production_control_environment
-from researchops.runners.mcp_audit import safe_tool_timing, summarize_mcp_tools, validate_agy_mcp_reads
+from researchops.runners.mcp_audit import _safe_identifier, safe_tool_timing, summarize_mcp_tools, validate_agy_mcp_reads
 from researchops.runners.production_trace import ProductionToolTraceCollector
 from researchops.workspace.security import assert_path_contained, read_safe_bytes, open_safe_file
 from researchops.errors import WorkspaceError
@@ -139,6 +139,30 @@ def build_production_command(provider, binary, prompt, project_dir, work_dir, co
     return argv + ["--print", prompt], None
 
 
+def discover_mcp_server_tools(server_name, *, home_dir=None):
+    """Discover available tool schema names for a registered MCP server.
+
+    Inspects native tool schema JSON files under ~/.gemini/antigravity-cli/mcp/<server_name>/.
+    Returns a sorted list of valid tool names without contents.
+    """
+    if not isinstance(server_name, str) or _safe_identifier(server_name) == "[redacted]":
+        return []
+    home = Path(home_dir) if home_dir is not None else Path.home()
+    server_dir = home / ".gemini" / "antigravity-cli" / "mcp" / server_name
+    if not server_dir.is_dir() or server_dir.is_symlink():
+        return []
+    try:
+        tools = []
+        for entry in sorted(server_dir.iterdir()):
+            if entry.is_file() and not entry.is_symlink() and entry.name.endswith(".json"):
+                stem = entry.name[:-5]
+                if _safe_identifier(stem) != "[redacted]":
+                    tools.append(stem)
+        return tools
+    except (OSError, RuntimeError):
+        return []
+
+
 def _prompt(input_dir, project_dir, work_dir, context, mcp_inventory=None):
     files, total = {}, 0
     for path in sorted(input_dir.rglob("*")):
@@ -169,19 +193,31 @@ def _prompt(input_dir, project_dir, work_dir, context, mcp_inventory=None):
                         "Prefer summaries and narrowly scoped queries. Start with the smallest useful page (limit=1 when supported), then fetch additional relevant evidence in small pages. "
                         "Use only pagination/filter parameters exposed by the tool. If a response contains a truncation/omission marker, narrow the query and retrieve the missing relevant evidence; preserve unresolved omissions as coverage warnings. "
                         "Do not read MCP configuration, tokens, login files or environment secrets to repair a connection. "
-                        "On Antigravity only, you may read the native generated tool schema for an active MCP server under "
-                        "~/.gemini/antigravity-cli/mcp/<server>/*.json or its instructions.md, and the exact output.txt of a preceding error-free "
+                        "On Antigravity only, you may inspect native generated tool schemas under "
+                        "~/.gemini/antigravity-cli/mcp/<server>/ using list_dir, view_file, or grep_search, and read the exact output.txt of a preceding error-free "
                         "MCP call, or the exact content.md of a preceding successful native web page read, in this conversation under "
                         "~/.gemini/antigravity-cli/brain/<conversation>/.system_generated/steps/<step>/. "
-                        "Use only view_file or grep_search on these exact generated files; never scan their parent directories. "
                         "Use view_file to inspect the actual response, since a search excerpt does not verify the complete response. "
-                        "These narrow generated schema/result reads are the only exception to the home-directory prohibition below; "
+                        "These schema and result reads are the only exception to the home-directory prohibition below; "
                         "never read another conversation, credentials, settings, symlinks or arbitrary brain files. ")
         if mcp_inventory:
             registered = [item["name"] for item in mcp_inventory.get("servers", []) if item.get("enabled")]
             mcp_contract += ("Registered direct-server names (not exhaustive of plugin/App tools and not connection verification): "
                              + json.dumps(registered, ensure_ascii=False) + ". ")
-    contract = ("The submitted document must be the complete research result object matching the supplied research schema. Do not add recipient_group_id or recipient_group_name in research. "
+            discovered_tools = {}
+            for sname in registered:
+                tools = discover_mcp_server_tools(sname)
+                if tools:
+                    discovered_tools[sname] = tools
+            if discovered_tools:
+                mcp_contract += ("Discovered available tools on registered servers: "
+                                 + json.dumps(discovered_tools, ensure_ascii=False) + ". ")
+        mcp_contract += ("On Antigravity, MCP tools are invoked via the native call_mcp_tool(ServerName='<server>', ToolName='<tool>', Arguments={...}) tool "
+                         "(e.g. ServerName='research-mcp', ToolName='list_recent_releases', Arguments={...}); MCP tools are not registered as individual top-level tools. ")
+    subagent_policy = ("Single-agent execution is strictly required: do not define, invoke, or delegate to subagents "
+                       "(define_subagent, invoke_subagent, manage_subagents, send_message are prohibited in ResearchOps). "
+                       "Perform all work directly within this single session. ")
+    contract = (subagent_policy + "The submitted document must be the complete research result object matching the supplied research schema. Do not add recipient_group_id or recipient_group_name in research. "
                 "Only request attachments or inline images when the task asks for them; finding a document or image URL is not itself a request. "
                 "For task-generated local artifacts, write their bytes below artifact_root using the exact relative paths declared in artifacts; never invent files or hashes. "
                 "For local run-level logs or JSON evidence, use scope=run and role=evidence, omit source and record_ids or use source=null and record_ids=[]. These files are archived as research evidence and are not email attachments, including when status=no_updates and records=[]. "
@@ -195,8 +231,9 @@ def _prompt(input_dir, project_dir, work_dir, context, mcp_inventory=None):
                 "Optional declared_status records the source's availability. on_failure defaults to continue and announce_missing defaults to false; use on_failure=hold or announce_missing=true only when the task explicitly requires that failure behavior. "
                 "Do not add missing-file prose to summary/warnings solely because the application has yet to download a requested file. If the task did not request files, omit these requests or use artifacts=[]."
                 if phase == "research" else
-                "The submitted document must contain exactly {composition_result: object, html: string, text: string}. composition_result follows the supplied composition schema with html_path=email.html and text_path=email.txt. Preserve every reportable record and approved attachment/inline CID in composition-input.json. "
+                subagent_policy + "The submitted document must contain exactly {composition_result: object, html: string, text: string}. composition_result follows the supplied composition schema with html_path=email.html and text_path=email.txt. Preserve every reportable record and approved attachment/inline CID in composition-input.json. "
                 "For recipient_routing_mode=catalog_name, follow task.md and return exactly one recipient_group_name matching a display_name from recipient_groups in the immutable composition input; never an address or invented name. For legacy input, select one opaque recipient_group_id from allowed_recipient_group_ids. Do not perform new research. "
+                "All necessary inputs for composition are provided in the staged input files (composition-input.json, task.md, email_spec.md); do not run recursive searches, find, or grep across the host filesystem or parent directories outside this workspace. "
                 "The following application transport requirements apply independently of the operator's email_spec.md presentation preferences: "
                 "produce complete balanced html/head/body elements, with exactly one data-local-date=\"YYYY-MM-DD\" attribute on body using composition-input.json run.local_date. Do not repeat this date marker in a meta element or elsewhere. "
                 "Include every reportable record exactly once with its exact data-record-id attribute inside body; included_record_ids must contain exactly those record_id values. Include those exact IDs and the supplied run.local_date_display in the plain text body as well. "
@@ -239,7 +276,7 @@ def _prompt(input_dir, project_dir, work_dir, context, mcp_inventory=None):
             "Build the complete document as a Python dict in your analysis code, using json.dumps for any JSON configuration embedded in summary text. Never hand-escape a JSON string inside another JSON envelope. "
             "Before final submission, add submission_helper to sys.path and import submit_result from researchops.runners.result_submission. "
             "Call print(submit_result(document, context.invocation_stage, submission_dir)) exactly after the document is complete. "
-            "This helper serializes and strictly validates the document and phase output sizes before writing submission.json. Correct your source data if validation fails; do not use unescape, regex repair, or a lenient parser. "
+            "This helper serializes and strictly validates the document, phase output sizes and Compose HTML tag balance before writing submission.json. If validation fails, correct your source data or HTML tags in the same session and call submit_result again; do not use unescape, regex repair, or a lenient parser. "
             "Return exactly the helper's printed object {transport_version:2,response_file:\"submission.json\",sha256:...,size_bytes:...}, without prose or markdown. "
             "Do not put document bytes, response_json, HTML or text in the final envelope, invent hashes, modify a submitted file, or declare the helper/submission files as Research artifacts. "
             + contract + " Do not invent research findings or claim a tool ran without evidence. Preserve warnings and the supplied Seoul date.\n"

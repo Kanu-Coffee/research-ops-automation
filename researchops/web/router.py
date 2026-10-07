@@ -330,7 +330,7 @@ class WebRouter:
 
         def posted_editor_values():
             values = {key: get_field(key) for key in ("task_id", "name", "email_spec_md", "runner_type",
-                "recipient_group_id", "recipient_routing_mode", "model", "sender_profile_id", "expected_version_hash", "expected_updated_at",
+                "recipient_group_id", "recipient_routing_mode", "recipient_visibility", "model", "sender_profile_id", "expected_version_hash", "expected_updated_at",
                 "source_task_id", "source_version_hash", "cron", "schedule_preset", "schedule_time",
                 "schedule_weekday", "schedule_monthday", "schedule_minute", "launch_mode", "action")}
             values["task_md"] = get_field("task_md", get_field("instructions"))
@@ -694,6 +694,10 @@ class WebRouter:
                     values = posted_editor_values()
                     values["task_id"] = task_id
                     try:
+                        raw_visibility = values.get("recipient_visibility")
+                        if raw_visibility and raw_visibility not in {"bcc", "to"}:
+                            raise ValidationError("수신자 표시 설정이 올바르지 않습니다.")
+                        visibility = "bcc" if raw_visibility == "bcc" else "to"
                         self.app.tasks.update_production_task(task_id,
                             expected_version_hash=get_field("expected_version_hash"),
                             expected_updated_at=get_field("expected_updated_at") or None,
@@ -702,6 +706,7 @@ class WebRouter:
                             runner_type=get_field("runner_type", "codex_exec"),
                             recipient_group_id=get_field("recipient_group_id").strip(),
                             recipient_routing_mode=get_field("recipient_routing_mode") or None,
+                            recipient_visibility=visibility,
                             sender_profile_id=get_field("sender_profile_id", "default"),
                             cron=cron_from_form(get_field), schedule_enabled=values["schedule_enabled"],
                             model=get_field("model").strip() or None,
@@ -715,6 +720,10 @@ class WebRouter:
                     task_id = get_field("task_id").strip() if principal.role == "admin" else ""
                     values = posted_editor_values()
                     try:
+                        raw_visibility = values.get("recipient_visibility")
+                        if raw_visibility and raw_visibility not in {"bcc", "to"}:
+                            raise ValidationError("수신자 표시 설정이 올바르지 않습니다.")
+                        visibility = "bcc" if raw_visibility == "bcc" else "to"
                         launch_mode = get_field("launch_mode")
                         if launch_mode and launch_mode not in {"save", "run", "schedule"}:
                             raise ValidationError("저장 후 실행 방식을 선택하세요.")
@@ -732,6 +741,7 @@ class WebRouter:
                             runner_type=get_field("runner_type", "codex_exec"),
                             recipient_group_id=get_field("recipient_group_id").strip(),
                             recipient_routing_mode=get_field("recipient_routing_mode") or None,
+                            recipient_visibility=visibility,
                             cron=cron_from_form(get_field),
                             schedule_enabled=scheduled,
                             model=get_field("model").strip() or None,

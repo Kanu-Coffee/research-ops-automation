@@ -382,6 +382,44 @@ class ProductionAgyTraceTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "AGY_MCP_SPILL_PROVENANCE_INVALID"):
                 validate_agy_mcp_reads(denied, {"s"}, home_dir=home)
 
+    def test_agy_subagent_step_and_tools_fail_with_unapproved_subagent_action(self):
+        subagent_step = {
+            "event": "step_update",
+            "step_update": {
+                "step_index": 5,
+                "step_type": "subagent",
+                "tool_name": "invoke_subagent",
+                "state": "ACTIVE",
+                "subagent_info": {"subagents": [{"type_name": "researcher"}]}
+            }
+        }
+        collector = ProductionToolTraceCollector("antigravity_exec")
+        with self.assertRaisesRegex(TraceStreamError, "trace_invalid_lifecycle"):
+            collector.feed(encode(agy_events([subagent_step])))
+        self.assertEqual(collector.diagnostics()["lifecycle_error_code"], "unapproved_subagent_action")
+
+        for tool_name in ("define_subagent", "invoke_subagent", "manage_subagents", "send_message"):
+            collector = ProductionToolTraceCollector("antigravity_exec")
+            step = agy_step(6, tool_name, state="ACTIVE")
+            with self.subTest(tool=tool_name), self.assertRaisesRegex(TraceStreamError, "trace_invalid_lifecycle"):
+                collector.feed(encode(agy_events([step])))
+            self.assertEqual(collector.diagnostics()["lifecycle_error_code"], "unapproved_subagent_action")
+
+    def test_agy_system_message_step_is_accepted_as_lifecycle_event(self):
+        sys_step = {
+            "event": "step_update",
+            "step_update": {
+                "step_index": 7,
+                "step_type": "system_message",
+                "state": "DONE",
+                "duration_seconds": 0.0001
+            }
+        }
+        collector = ProductionToolTraceCollector("antigravity_exec")
+        collector.feed(encode(agy_events([sys_step])))
+        self.assertIsNone(collector.diagnostics()["lifecycle_error_code"])
+
+
 
 @unittest.skipUnless(os.name == "posix", "POSIX capture")
 class ProductionFileCaptureTests(unittest.TestCase):

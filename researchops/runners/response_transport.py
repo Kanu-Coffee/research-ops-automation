@@ -1,8 +1,8 @@
 """Strict response transport with content-free, stage-specific diagnostics.
 
-Locations refer to the JSON source at the failing stage: line and column are
-one-based, and offset is a zero-based Unicode character offset. A position is
-omitted when the strict decoder cannot identify one reliably. No model content,
+Locations refer to the JSON or Compose HTML source at the failing stage: line
+and column are one-based, and offset is a zero-based Unicode character offset. A
+position is omitted when the strict decoder cannot identify one reliably. No model content,
 JSON keys, decoder messages or source-bearing exception chains are retained.
 """
 
@@ -20,8 +20,11 @@ RESPONSE_DIAGNOSTIC_CODES = frozenset({
     "file_reference_invalid", "import_size_exceeded", "submission_shape_invalid",
     "submission_file_unsafe", "submission_file_changed", "submission_size_exceeded",
     "submission_json_invalid", "submission_object_required",
+    "submission_html_unbalanced",
 })
-RESPONSE_DIAGNOSTIC_STAGES = frozenset({"outer_json", "envelope", "inner_json", "inner_type", "import", "submission"})
+RESPONSE_DIAGNOSTIC_STAGES = frozenset({
+    "outer_json", "envelope", "inner_json", "inner_type", "import", "submission", "compose_html",
+})
 
 
 @dataclass(frozen=True)

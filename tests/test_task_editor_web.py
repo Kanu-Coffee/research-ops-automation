@@ -143,6 +143,36 @@ class TaskEditorWebTests(unittest.TestCase):
         self.assertIn(b'stale changes retained in form',response[2])
         self.assertEqual(self.app.tasks.get_task_editor("operator-task")["name"],saved["name"])
 
+    def test_recipient_visibility_web_create_edit_and_validation(self):
+        # 1. Create with BCC checked
+        self.create(task_id="bcc-web-task", recipient_visibility="bcc")
+        version = self.app.task_repo.get_active_version("bcc-web-task")
+        self.assertEqual(version.definition.delivery.get("recipient_visibility"), "bcc")
+        detail = self.request("GET", "/tasks/bcc-web-task")[2].decode("utf-8")
+        self.assertIn("수신자 표시: <strong>숨은참조(BCC)</strong>", detail)
+
+        # GET edit form: checkbox is checked
+        edit_fields = self.get_form("/tasks/bcc-web-task/edit", "/tasks/bcc-web-task/edit")
+        self.assertEqual(edit_fields.get("recipient_visibility"), "bcc")
+
+        # 2. Edit: uncheck BCC (omit recipient_visibility)
+        edit_fields.pop("recipient_visibility", None)
+        response = self.request("POST", "/tasks/bcc-web-task/edit", edit_fields)
+        self.assertEqual(response[0], 303)
+        updated = self.app.task_repo.get_active_version("bcc-web-task")
+        self.assertNotIn("recipient_visibility", updated.definition.delivery)
+        detail_after = self.request("GET", "/tasks/bcc-web-task")[2].decode("utf-8")
+        self.assertIn("수신자 표시: <strong>일반(To)</strong>", detail_after)
+
+        # 3. Invalid visibility rejected
+        bad_fields = self.get_form("/tasks/new", "/tasks/production/create")
+        bad_fields.update(task_id="bad-vis-task", name="Bad Vis", task_md="내용",
+                          recipient_group_id="research-team", recipient_visibility="cc")
+        res = self.request("POST", "/tasks/production/create", bad_fields)
+        self.assertEqual(res[0], 400)
+        self.assertIn("수신자 표시 설정이 올바르지 않습니다".encode("utf-8"), res[2])
+        self.assertIsNone(self.app.task_repo.get_active_version("bad-vis-task"))
+
     def test_clone_loads_real_content_without_mutation_then_creates_schedule_off_copy(self):
         self.create(research_provider="antigravity_exec",compose_provider="antigravity_exec",schedule_preset="weekly",schedule_weekday="2")
         before=self.app.tasks.get_task_editor("operator-task")

@@ -4,6 +4,7 @@ The helper has no credentials or application configuration. Its success is
 never trusted by the importer, which independently verifies the referenced file.
 """
 
+from html.parser import HTMLParser
 import hashlib
 import json
 import os
@@ -17,6 +18,10 @@ MAX_RESPONSE_BYTES = 1_000_000
 SUBMISSION_NAME = "submission.json"
 SUBMISSION_DIRECTORY = ".researchops-submission"
 HELPER_DIRECTORY = ".researchops-submit"
+VOID_TAGS = frozenset({
+    "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param",
+    "source", "track", "wbr",
+})
 FILE_ENVELOPE_SCHEMA = {
     "type": "object", "additionalProperties": False,
     "properties": {
@@ -27,6 +32,69 @@ FILE_ENVELOPE_SCHEMA = {
     },
     "required": ["transport_version", "response_file", "sha256", "size_bytes"],
 }
+
+
+class HTMLTagBalanceParser(HTMLParser):
+    def __init__(self, text):
+        super().__init__(convert_charrefs=True)
+        self.text = text
+        self.line_starts = [0]
+        pos = -1
+        while True:
+            pos = text.find("\n", pos + 1)
+            if pos == -1:
+                break
+            self.line_starts.append(pos + 1)
+        self.stack = []
+
+    def _get_position(self, lineno=None, colno=None):
+        if lineno is None or colno is None:
+            lineno, colno = self.getpos()
+        line = lineno if isinstance(lineno, int) and lineno >= 1 else None
+        column = (colno + 1) if isinstance(colno, int) and colno >= 0 else None
+        offset = None
+        if line is not None and column is not None and 1 <= line <= len(self.line_starts):
+            pos = self.line_starts[line - 1] + colno
+            if 0 <= pos <= len(self.text):
+                offset = pos
+        return line, column, offset
+
+    def handle_starttag(self, tag, attrs):
+        if tag not in VOID_TAGS:
+            line, column, offset = self._get_position()
+            self.stack.append((tag, line, column, offset))
+
+    def handle_startendtag(self, tag, attrs):
+        self.handle_starttag(tag, attrs)
+        if tag not in VOID_TAGS:
+            self.handle_endtag(tag)
+
+    def handle_endtag(self, tag):
+        if tag in VOID_TAGS:
+            return
+        if not self.stack or self.stack[-1][0] != tag:
+            line, column, offset = self._get_position()
+            raise ResponseTransportError("submission_html_unbalanced", "compose_html",
+                                         line=line, column=column, offset=offset)
+        self.stack.pop()
+
+
+def check_compose_html_balance(html_text):
+    """Reject unbalanced HTML tags before writing a compose submission."""
+    parser = HTMLTagBalanceParser(html_text)
+    try:
+        parser.feed(html_text)
+        parser.close()
+    except ResponseTransportError:
+        raise
+    except Exception:
+        line, column, offset = parser._get_position()
+        raise ResponseTransportError("submission_html_unbalanced", "compose_html",
+                                     line=line, column=column, offset=offset) from None
+    if parser.stack:
+        _, line, column, offset = parser.stack[-1]
+        raise ResponseTransportError("submission_html_unbalanced", "compose_html",
+                                     line=line, column=column, offset=offset)
 
 
 def prepare_result(document, stage, *, max_bytes=MAX_RESPONSE_BYTES):
@@ -83,6 +151,8 @@ def prepare_result(document, stage, *, max_bytes=MAX_RESPONSE_BYTES):
         raise ResponseTransportError("submission_shape_invalid", "submission")
     if sum(map(len, files.values())) > max_bytes:
         raise ResponseTransportError("import_size_exceeded", "import")
+    if stage == "compose":
+        check_compose_html_balance(document["html"])
     return raw, files
 
 

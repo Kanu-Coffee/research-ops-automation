@@ -314,7 +314,7 @@ def _antigravity(events):
             raise ValueError("Invalid Antigravity step type")
         if consume_agy_finish(step, pending, seen):
             continue
-        if kind in {"user_input", "agent_response", "checkpoint"}:
+        if kind in {"user_input", "agent_response", "checkpoint", "system_message"}:
             if kind == "agent_response":
                 activity = activity or any(isinstance(step.get(key), str) and bool(step[key].strip())
                                           for key in ("text", "text_delta"))
@@ -331,6 +331,8 @@ def _antigravity(events):
             seen.add(index)
             warnings.append("ANTIGRAVITY_ERROR_MESSAGE")
             continue
+        if kind == "subagent":
+            raise ValueError("Unapproved Antigravity subagent action in development probe")
         if kind != "tool":
             raise ValueError("Unapproved Antigravity action in development probe")
         state, index = step.get("state"), step.get("step_index")
@@ -338,6 +340,8 @@ def _antigravity(events):
             raise ValueError("Invalid or duplicate Antigravity tool step")
         info = step.get("tool_info")
         name = step.get("tool_name")
+        if name in {"invoke_subagent", "define_subagent", "manage_subagents", "send_message"}:
+            raise ValueError("Unapproved Antigravity subagent action in development probe")
         if not isinstance(info, dict) or not isinstance(name, str) or not name or info.get("name") != name:
             raise ValueError("Invalid Antigravity tool evidence")
         if index in pending and pending[index] != name:

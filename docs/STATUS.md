@@ -1,4 +1,4 @@
-# v1.0.0 릴리스 범위
+# v1.0.1 릴리스 범위
 
 이 문서는 공개 소스의 기능과 제약을 기록합니다. 특정 서버의 가동 상태나 계정·Task·실발송 이력을 공개하지 않습니다.
 
@@ -8,7 +8,7 @@ Research/Compose native 실행, 단계별 모델 선택, Task 불변 버전, 서
 
 기본 자동 검증은 합성 입력·독립 runtime·fake runner/CLI double·SMTP double로 수행합니다. 정확한 릴리스 검증 결과는 GitHub Release와 CI 기록을 기준으로 확인합니다. `--live` 개발 명령은 별도로 제공하지만 기본 테스트가 실제 모델·실수신자 발송·외부 proxy 왕복까지 검증하는 것은 아닙니다.
 
-## 릴리스 후보 검증
+## v1.0.0 기준선 검증 이력
 
 | 검증 | 결과 |
 |---|---|
@@ -36,3 +36,7 @@ Research/Compose native 실행, 단계별 모델 선택, Task 불변 버전, 서
 DB schema v3를 사용합니다. 오래된 schema는 앱 초기화 시 migration될 수 있으므로 복사본 검증과 백업을 먼저 수행합니다. Web·worker·SMTP·scheduler는 같은 릴리스로 전환합니다. 새 쓰기 후에는 과거 DB로 자동 복원하지 않고 현재 schema와 호환되는 수정으로 복구합니다.
 
 소스 공개 시 실제 설정·DB·archive·운영 Task 지시문, 해당 Task 전용 migration/실행 스크립트와 과거 내부 기록·세션 프롬프트를 제외하고, 독립적인 가상 소프트웨어 릴리스 예제로 대체했습니다. [보안](12_SECURITY.md)과 [업그레이드](BACKUP_AND_UPGRADE.md)를 함께 확인하세요.
+
+## v1.0.1 변경
+
+SMTP 유휴 metadata 조회와 제한된 감사 파일 복구, Task별 BCC, Compose HTML 균형 검사, 활성 MCP schema 탐색과 단일 에이전트 감사 개선을 포함합니다. 실제 운영 설정·업무 지시문·내부 검토 기록은 공개하지 않습니다. 이번 릴리스의 검증 결과는 Release 첨부 `VALIDATION.json`과 CI 기록에서 확인합니다.

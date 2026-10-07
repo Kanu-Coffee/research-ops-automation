@@ -109,7 +109,9 @@ class RunResponseDiagnosticsTests(unittest.TestCase):
 
     def test_submission_diagnostics_do_not_expose_file_paths_or_decoder_messages(self):
         for code, stage in (("submission_file_unsafe", "submission"),
-                            ("submission_json_invalid", "submission"), ("import_size_exceeded", "import")):
+                            ("submission_json_invalid", "submission"),
+                            ("submission_html_unbalanced", "compose_html"),
+                            ("import_size_exceeded", "import")):
             with self.subTest(code=code):
                 self.write_report({"executions": [{"stage": "research", "response_diagnostic": {
                     "code": code, "stage": stage, "line": None, "column": None, "offset": None,
@@ -121,6 +123,19 @@ class RunResponseDiagnosticsTests(unittest.TestCase):
                 self.assertIn(code, rendered)
                 self.assertNotIn("secret-token", rendered)
                 self.assertIn("위치 정보 없음", rendered)
+
+    def test_compose_html_unbalanced_diagnostic_renders_cleanly_with_position(self):
+        diagnostic = {"code": "submission_html_unbalanced", "stage": "compose_html",
+                      "line": 15, "column": 7, "offset": 120}
+        self.write_report({"executions": [{"stage": "compose", "response_diagnostic": diagnostic}]})
+        summary = self.app.runs.get_run_response_diagnostics(self.run.run_id)
+        self.assertEqual(summary["status"], "recorded")
+        self.assertEqual(summary["errors"], [{"invocation_stage": "compose", **diagnostic}])
+        rendered = render_run_response_diagnostics(summary)
+        self.assertIn("submission_html_unbalanced", rendered)
+        self.assertIn("Compose HTML의 태그 균형이 맞지 않습니다.", rendered)
+        self.assertIn("행 15 · 열 7", rendered)
+        self.assertIn("Compose HTML", rendered)
 
     def test_invalid_diagnostic_or_archive_is_unavailable_without_raw_data(self):
         for report in ({"executions": [{"response_diagnostic": {**INNER_ERROR, "code": "secret-token"}}]},

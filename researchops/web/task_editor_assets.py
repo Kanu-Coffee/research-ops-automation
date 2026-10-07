@@ -92,6 +92,7 @@ EDITOR_SCRIPT = r'''<script>
       name: form.elements.namedItem('name').value.trim() || '이름 입력 필요',
       sender: selectedText('sender_profile_id'),
       recipient: routing === 'catalog_name' ? '조사 지시에 따라 AI가 그룹 선택' : selectedText('recipient_group_id'),
+      visibility: form.elements.namedItem('recipient_visibility')?.checked ? '숨은참조(BCC)' : '일반(To)',
       schedule: document.getElementById('schedule-summary').textContent,
       launch: launch ? ({save:'저장만 · 예약 꺼짐',run:'지금 실행·발송 · 반복 예약 꺼짐',schedule:'예약 시작'}[launch]) : (scheduled ? '예약 켜짐 · 즉시 실행 없음' : '예약 꺼짐 · 즉시 실행 없음')
     };

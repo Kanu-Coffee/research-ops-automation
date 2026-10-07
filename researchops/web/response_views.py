@@ -19,11 +19,13 @@ CODE_LABELS = {
     "submission_json_invalid": "제출 파일의 JSON 문법을 확인할 수 없습니다.",
     "submission_object_required": "제출 파일의 결과는 JSON 객체여야 합니다.",
     "submission_shape_invalid": "제출 파일의 결과 형식이 계약과 다릅니다.",
+    "submission_html_unbalanced": "Compose HTML의 태그 균형이 맞지 않습니다.",
     "import_size_exceeded": "결과 반입 크기 제한을 초과했습니다.",
 }
 STAGE_LABELS = {"outer_json": "외부 JSON", "envelope": "응답 envelope",
                 "inner_json": "내부 JSON", "inner_type": "내부 객체 형식",
-                "submission": "제출 파일", "import": "결과 반입"}
+                "submission": "제출 파일", "compose_html": "Compose HTML",
+                "import": "결과 반입"}
 
 
 def render_run_response_diagnostics(report):
@@ -53,7 +55,7 @@ def render_run_response_diagnostics(report):
         return ""
     return f'''<div class="card" id="response-diagnostics">
       <div class="card-header"><div class="card-title">결과 응답 진단</div></div>
-      <p class="form-help" style="margin-bottom:12px;">행·열은 표시된 해석 단계의 JSON 문자열 기준입니다. 위치를 확인할 수 없는 오류는 별도로 표시합니다.</p>
+      <p class="form-help" style="margin-bottom:12px;">행·열은 표시된 해석 단계의 원본 문자열(JSON 또는 Compose HTML) 기준입니다. 위치를 확인할 수 없는 오류는 별도로 표시합니다.</p>
       <div style="overflow-x:auto;"><table><thead><tr><th>호출</th><th>해석 단계</th><th>오류</th><th>위치</th></tr></thead>
       <tbody>{''.join(rows)}</tbody></table></div>
     </div>'''

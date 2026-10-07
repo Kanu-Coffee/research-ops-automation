@@ -320,7 +320,8 @@ class TaskService:
                                source_task_id: Optional[str] = None,
                                source_version_hash: Optional[str] = None,
                                recipient_routing_mode: Optional[str] = None,
-                               stage_settings: Optional[dict] = None) -> TaskVersion:
+                               stage_settings: Optional[dict] = None,
+                               recipient_visibility: str = "to") -> TaskVersion:
         """Publish operator instructions directly for real execution and delivery.
 
         Repeating the exact task ID/package is idempotent; a conflicting existing
@@ -341,7 +342,8 @@ class TaskService:
             schedule_enabled=schedule_enabled, model=model, task_md=task_md,
             email_spec_md=email_spec_md, sender_profile_id=sender_profile_id,
             recipient_routing_mode=recipient_routing_mode or ("legacy_ids" if recipient_group_id else "catalog_name"),
-            stage_settings=self._normalize_stage_settings(stage_settings) if not source_task_id else None)
+            stage_settings=self._normalize_stage_settings(stage_settings) if not source_task_id else None,
+            recipient_visibility=recipient_visibility)
         if source_task_id:
             self._require_not_deleted(source_task_id)
             source = self.task_repo.get_active_version(source_task_id)
@@ -356,7 +358,8 @@ class TaskService:
                 email_spec_md=email_spec_md, runner_type=runner_type,
                 recipient_group_id=recipient_group_id, sender_profile_id=sender_profile_id,
                 cron=cron, schedule_enabled=schedule_enabled, model=model,
-                recipient_routing_mode=recipient_routing_mode, stage_settings=stage_settings)
+                recipient_routing_mode=recipient_routing_mode, stage_settings=stage_settings,
+                recipient_visibility=recipient_visibility)
         definition_dict = yaml.safe_load(files["task.yaml"])
         self.loader.validate_package(definition_dict, files)
         definition = TaskDefinition(**definition_dict)
@@ -396,6 +399,7 @@ class TaskService:
             "enabled": bool(status["enabled"]), "schedule_enabled": bool(status["enabled"]),
             "delivery_mode": status["delivery_mode"],
             "recipient_routing_mode": task.delivery.get("recipient_routing_mode", "legacy_ids"),
+            "recipient_visibility": task.delivery.get("recipient_visibility", "to"),
             "recipient_group_id": groups[0] if groups else "", "recipient_group_ids": groups,
             "sender_profile_id": task.delivery.get("sender_profile_id", "default"),
             "expected_version_hash": version.version_hash, "expected_updated_at": status["updated_at"],
@@ -407,7 +411,8 @@ class TaskService:
                       recipient_group_id: str, sender_profile_id: str, cron: str,
                       schedule_enabled: bool, model: Optional[str],
                       recipient_routing_mode: Optional[str] = None,
-                      stage_settings: Optional[dict] = None) -> Dict[str, str]:
+                      stage_settings: Optional[dict] = None,
+                      recipient_visibility: str = "to") -> Dict[str, str]:
         # Reuse input validation only, never the generated package/body template.
         from researchops.package.production_template import build_production_package
         old_mode = source.definition.delivery.get("recipient_routing_mode", "legacy_ids")
@@ -427,6 +432,10 @@ class TaskService:
             config["runner"]["stages"] = stages
             config["runner"].update(stages["research"])
         config["delivery"]["sender_profile_id"] = sender_profile_id
+        if recipient_visibility == "bcc":
+            config["delivery"]["recipient_visibility"] = "bcc"
+        else:
+            config["delivery"].pop("recipient_visibility", None)
         old_groups = config["delivery"].get("allowed_recipient_group_ids", [])
         # Existing multi-group rules remain intact if the UI's initial selection
         # is unchanged; a newly selected group updates only the routing enum.
@@ -486,7 +495,8 @@ class TaskService:
                                sender_profile_id: str = "default", task_md: Optional[str] = None,
                                expected_updated_at: Optional[str] = None,
                                recipient_routing_mode: Optional[str] = None,
-                               stage_settings: Optional[dict] = None) -> TaskVersion:
+                               stage_settings: Optional[dict] = None,
+                               recipient_visibility: str = "to") -> TaskVersion:
         """Save a real task in place, retaining its identity and immutable history."""
         if self.settings.environment != "production":
             raise ValidationError("Direct task editing requires the production environment")
@@ -502,7 +512,8 @@ class TaskService:
             email_spec_md=email_spec_md, runner_type=runner_type,
             recipient_group_id=recipient_group_id, sender_profile_id=sender_profile_id,
             cron=cron, schedule_enabled=schedule_enabled, model=model,
-            recipient_routing_mode=recipient_routing_mode, stage_settings=stage_settings)
+            recipient_routing_mode=recipient_routing_mode, stage_settings=stage_settings,
+            recipient_visibility=recipient_visibility)
         config = yaml.safe_load(files["task.yaml"])
         self.loader.validate_package(config, files)
         definition = TaskDefinition(**config)

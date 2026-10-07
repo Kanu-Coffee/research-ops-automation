@@ -241,6 +241,7 @@ def render_task_detail(
                 <p style="font-size:13px; color:#475569;">결과 없을 때 발송: <strong>{delivery_conf.get('send_on_empty', True)}</strong></p>
                 <p style="font-size:13px; color:#475569;">일부 결과 처리: <code>{_escape(delivery_conf.get('partial_policy', 'send_with_warning'))}</code></p>
                 <p style="font-size:13px; color:#475569;">전달 방식: <code>{delivery_mode}</code></p>
+                <p style="font-size:13px; color:#475569;">수신자 표시: <strong>{'숨은참조(BCC)' if delivery_conf.get('recipient_visibility') == 'bcc' else '일반(To)'}</strong></p>
                 <p style="font-size:13px; color:#475569;">발신 계정: {_escape((sender_names or {}).get(delivery_conf.get('sender_profile_id', 'default'), delivery_conf.get('sender_profile_id', 'default')))} · <a href="/delivery?sender={_escape(delivery_conf.get('sender_profile_id', 'default'))}">설정 보기</a></p>
             </div>
         </div>

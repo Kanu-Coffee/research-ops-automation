@@ -563,6 +563,21 @@ class TestRunnerToolEvents(unittest.TestCase):
             "step_type": "agent_response", "state": "DONE", "text_delta": "Model commentary"}}])
         agy[-1]["result"]["usage"] = {}
         self.assertTrue(parse_tool_trace("antigravity_exec", encode(agy)).model_activity_observed)
+
+    def test_agy_system_message_step_is_accepted_in_probe(self):
+        sys_step = {
+            "event": "step_update",
+            "step_update": {
+                "step_index": 7,
+                "step_type": "system_message",
+                "state": "DONE",
+                "duration_seconds": 0.0001
+            }
+        }
+        events = agy_events([sys_step])
+        trace = parse_tool_trace("antigravity_exec", encode(events))
+        self.assertTrue(trace.terminal)
+        self.assertTrue(trace.successful_terminal)
         no_activity = [{"type": "thread.started"}, {"type": "turn.started"}, {"type": "turn.failed"}]
         self.assertFalse(parse_tool_trace("codex_exec", encode(no_activity)).model_activity_observed)
 
@@ -589,6 +604,25 @@ class TestRunnerToolEvents(unittest.TestCase):
             events[-1]["result"]["denied_actions"] = value
             with self.subTest(value=value), self.assertRaises(ValueError):
                 parse_tool_trace("antigravity_exec", encode(events))
+
+    def test_agy_subagent_events_rejected_in_tool_trace(self):
+        subagent_step = {
+            "event": "step_update",
+            "step_update": {
+                "step_index": 5,
+                "step_type": "subagent",
+                "tool_name": "invoke_subagent",
+                "state": "ACTIVE",
+                "subagent_info": {"subagents": [{"type_name": "researcher"}]}
+            }
+        }
+        with self.assertRaisesRegex(ValueError, "Unapproved Antigravity subagent action"):
+            parse_tool_trace("antigravity_exec", encode(agy_events([subagent_step])))
+
+        for tool_name in ("define_subagent", "invoke_subagent", "manage_subagents", "send_message"):
+            step = agy_step(6, tool_name, state="ACTIVE")
+            with self.subTest(tool=tool_name), self.assertRaisesRegex(ValueError, "Unapproved Antigravity subagent action"):
+                parse_tool_trace("antigravity_exec", encode(agy_events([step])))
 
 
 if __name__ == "__main__":

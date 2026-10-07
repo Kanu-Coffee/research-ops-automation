@@ -245,6 +245,37 @@ class ProductionRunnerTests(unittest.TestCase):
         self.assertIn("generated tool schema", prompt)
         self.assertIn("this conversation", prompt)
         self.assertIn("Do not read MCP configuration", prompt)
+        self.assertIn("call_mcp_tool", prompt)
+        self.assertIn("Single-agent execution is strictly required", prompt)
+        self.assertIn("define_subagent", prompt)
+
+    def test_mcp_tool_discovery_and_prompt_injection(self):
+        from researchops.runners.production import discover_mcp_server_tools
+        with tempfile.TemporaryDirectory() as temp:
+            home = Path(temp)
+            server_dir = home / ".gemini/antigravity-cli/mcp/my-test-mcp"
+            server_dir.mkdir(parents=True)
+            (server_dir / "fetch_records.json").write_text('{"description": "test"}')
+            (server_dir / "query_data.json").write_text('{"description": "test"}')
+            (server_dir / "instructions.md").write_text('Instructions')
+            (server_dir / "not_json.txt").write_text('ignore')
+
+            tools = discover_mcp_server_tools("my-test-mcp", home_dir=home)
+            self.assertEqual(tools, ["fetch_records", "query_data"])
+
+            inventory = {"servers": [{"name": "my-test-mcp", "enabled": True}]}
+            with patch("researchops.runners.production.Path.home", return_value=home):
+                prompt = _prompt(self.input, self.project, self.tmp, self.context(), mcp_inventory=inventory)
+                self.assertIn("Discovered available tools on registered servers", prompt)
+                self.assertIn("fetch_records", prompt)
+                self.assertIn("query_data", prompt)
+                self.assertIn("list_dir, view_file, or grep_search", prompt)
+
+    def test_compose_prompt_includes_single_agent_policy(self):
+        (self.input / "composition-input.json").write_text('{}')
+        prompt = _prompt(self.input, self.project, self.tmp, self.context("compose"))
+        self.assertIn("Single-agent execution is strictly required", prompt)
+        self.assertIn("define_subagent", prompt)
 
     def test_agy_search_of_current_generated_web_file_imports_but_directory_scan_does_not(self):
         from tests.test_runner_tool_events import agy_step
