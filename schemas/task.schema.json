@@ -331,6 +331,14 @@
             "hold",
             "fail"
           ]
+        },
+        "recipient_visibility": {
+          "enum": [
+            "to",
+            "bcc"
+          ],
+          "default": "to",
+          "description": "Recipient address visibility in MIME headers. 'to' places all group recipients in the To header. 'bcc' sends as blind carbon copy (undisclosed-recipients:; in To header, actual addresses only in SMTP envelope)."
         }
       },
       "allOf": [

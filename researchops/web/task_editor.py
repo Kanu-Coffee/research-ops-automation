@@ -75,6 +75,7 @@ def task_editor_body(values: dict | None = None, *, mode: str = "create", recipi
     review = f'''<section id="editor-panel-review" role="tabpanel" aria-labelledby="editor-tab-review" data-editor-panel="review" tabindex="-1">
         <h2>설정 확인</h2><dl class="editor-review"><dt>Task</dt><dd data-editor-summary="name">{_e(value.get('name')) or '이름 입력 필요'}</dd>
         <dt>발신 계정</dt><dd data-editor-summary="sender"></dd><dt>수신자</dt><dd data-editor-summary="recipient"></dd>
+        <dt>수신자 표시</dt><dd data-editor-summary="visibility">{'숨은참조(BCC)' if value.get('recipient_visibility') == 'bcc' else '일반(To)'}</dd>
         <dt>일정</dt><dd data-editor-summary="schedule">{_e(schedule_summary(cron))}</dd><dt>AI</dt><dd data-ai-save-summary>{_e(settings_summary(stage_settings(value)))}</dd></dl>
         <fieldset class="launch-choices"><legend>저장 후 할 일</legend>{launch_choices}</fieldset>
       </section>''' if wizard else ""
@@ -107,6 +108,10 @@ def task_editor_body(values: dict | None = None, *, mode: str = "create", recipi
               <div id="recipient-catalog-fields" {'' if catalog_routing else 'hidden'}><p class="form-help">조사 지시에 아래 그룹 이름과 선택 조건을 적으세요.</p>
                 <ul id="recipient-catalog-names" class="editor-group-names">{catalog_names}</ul></div></div>
           </div>
+          <div class="form-group">
+            <label class="editor-toggle"><input type="checkbox" name="recipient_visibility" value="bcc" {'checked' if value.get('recipient_visibility') == 'bcc' else ''}> 숨은참조(BCC)로 보내기</label>
+            <p class="form-help">이 Task의 모든 수신자에게 서로의 주소가 보이지 않게 발송합니다. 실제 주소는 SMTP 전송에만 사용하고 메일 헤더에는 남기지 않습니다.</p>
+          </div>
           <p id="editor-no-groups" role="alert" {'' if not groups else 'hidden'}>수신자 그룹을 추가하면 저장할 수 있습니다.</p>
           <div class="form-group"><div class="editor-label-row"><label class="form-label" for="email-spec-md">메일 작성 규격</label>
             <label class="btn btn-secondary btn-sm editor-import" for="email-spec-file">파일 불러오기<input id="email-spec-file" type="file" accept=".md,.txt,text/plain,text/markdown" data-import-target="email-spec-md"></label></div>
@@ -131,6 +136,7 @@ def task_editor_body(values: dict | None = None, *, mode: str = "create", recipi
       </div>
       <aside class="editor-summary"><details open><summary>설정 요약</summary><dl><dt>Task</dt><dd data-editor-summary="name">{_e(value.get('name')) or '이름 입력 필요'}</dd>
         <dt>발신 계정</dt><dd data-editor-summary="sender">{_e(sender_options.get(selected_sender))}</dd><dt>수신자</dt><dd data-editor-summary="recipient"></dd>
+        <dt>수신자 표시</dt><dd data-editor-summary="visibility">{'숨은참조(BCC)' if value.get('recipient_visibility') == 'bcc' else '일반(To)'}</dd>
         <dt>일정</dt><dd data-editor-summary="schedule">{_e(schedule_summary(cron))}</dd><dt>AI</dt><dd data-ai-save-summary>{_e(settings_summary(stage_settings(value)))}</dd>
         <dt>저장 후</dt><dd data-editor-summary="launch">{'저장만' if wizard else '현재 예약 유지'}</dd></dl></details></aside>
       </div>

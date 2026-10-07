@@ -81,6 +81,17 @@ class SmtpQueue:
         finally:
             conn.close()
 
+    def get_metadata(self, job_id):
+        conn = self.db.get_connection()
+        try:
+            row = conn.execute("""SELECT job_id,handoff_id,status,phase,message_id,mime_sha256,config_revision,
+                created_at,updated_at,error,server_reply,parent_job_id,attempt_number,
+                next_attempt_at,error_code,retryable,diagnostics_json
+                FROM smtp_attempts WHERE job_id=?""", (job_id,)).fetchone()
+            return dict(row) if row else None
+        finally:
+            conn.close()
+
     def latest(self, handoff_id):
         conn = self.db.get_connection()
         try:
@@ -186,10 +197,25 @@ class SmtpQueue:
         finally:
             conn.close()
 
-    def completed(self):
+    def completed(self, *, cursor_updated_at=None, cursor_job_id=None, limit=None):
         conn = self.db.get_connection()
         try:
-            return [dict(r) for r in conn.execute("SELECT job_id FROM smtp_attempts WHERE status NOT IN ('queued','sending') ORDER BY updated_at")]
+            sql = """SELECT job_id,handoff_id,status,phase,message_id,mime_sha256,config_revision,
+                created_at,updated_at,error,server_reply,parent_job_id,attempt_number,
+                next_attempt_at,error_code,retryable,diagnostics_json
+                FROM smtp_attempts WHERE status NOT IN ('queued','sending')"""
+            params = []
+            if cursor_updated_at is not None and cursor_job_id is not None:
+                sql += " AND (updated_at > ? OR (updated_at = ? AND job_id > ?))"
+                params.extend([cursor_updated_at, cursor_updated_at, cursor_job_id])
+            elif cursor_updated_at is not None:
+                sql += " AND updated_at > ?"
+                params.append(cursor_updated_at)
+            sql += " ORDER BY updated_at, job_id"
+            if limit is not None:
+                sql += " LIMIT ?"
+                params.append(int(limit))
+            return [dict(r) for r in conn.execute(sql, params)]
         finally:
             conn.close()
 

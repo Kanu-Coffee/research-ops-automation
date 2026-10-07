@@ -229,6 +229,7 @@ class TestResearchMCP(unittest.TestCase):
             ResearchMCPServer(link)
         public = self.root / "public"
         public.mkdir(mode=0o755)
+        public.chmod(0o755)  # Exercise public permissions independently of process umask.
         with self.assertRaises(ValueError):
             ResearchMCPServer(public / "audit.jsonl")
         linked_parent = self.root / "linked-parent"

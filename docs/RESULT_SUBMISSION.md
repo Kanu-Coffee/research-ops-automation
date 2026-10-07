@@ -89,3 +89,7 @@ Task 문서·출력 schema·수신자 모드·기존 archive·DB 계약을 변�
 
 완료된 MCP/모델 활동과 결과 제출 실패는 별개로 보존한다. 예전 진단 필드가 없는 Run에도
 없는 원인을 추측해 추가하지 않으며, 기존 실패 archive의 오류를 소급 수정하지 않는다.
+
+## Compose HTML 균형 검사
+
+제출 helper와 앱 반입 단계에서 HTML 태그의 균형을 검사합니다. 불일치 결과는 `submission_html_unbalanced` / `compose_html`로 진단하며 원문을 자동 수정하지 않습니다. Worker는 같은 호출 안에서 수정 후 제출할 수 있습니다. 이 검사는 브라우저 렌더링이나 모든 HTML 안전성 검증을 대체하지 않습니다.

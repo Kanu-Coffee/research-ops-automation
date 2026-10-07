@@ -33,7 +33,8 @@ def mcp_call(provider="antigravity_exec", *, output='{"answer": 42}', index=2,
 
 def read(path, *, index=3, name="view_file", success=True):
     field = {"view_file": "AbsolutePath", "grep_search": "SearchPath", "write_to_file": "TargetFile",
-             "list_dir": "DirectoryPath", "view_file_outline": "AbsolutePath"}[name]
+             "list_dir": "DirectoryPath", "view_file_outline": "AbsolutePath",
+             "find_by_name": "SearchDirectory"}[name]
     return {"name": name, "success": success, "state": "DONE" if success else "ERROR",
             "step_index": index, "details": {"name": name, "parameters": {field: str(path)},
                                                "output": "synthetic observed file body"}}
@@ -311,11 +312,22 @@ class AgyMCPReadTests(unittest.TestCase):
     def test_generated_writes_directory_scans_and_arbitrary_brain_reads_are_denied(self):
         for target in (read(self.spill, name="write_to_file"),
                        read(self.spill, name="view_file_outline"),
-                       read(self.schema.parent, name="list_dir"),
+                       read(self.spill.parent, name="list_dir"),
                        read(self.agy / "brain" / CONVERSATION / "private.md"),
                        read(self.agy / "auth.json")):
             with self.subTest(target=target), self.assertRaises(ValueError):
                 self.validate([mcp_call(), target])
+
+    def test_active_server_directory_can_be_scanned_with_list_dir_and_find_by_name(self):
+        self.validate([read(self.schema.parent, name="list_dir")])
+        self.validate([read(self.schema.parent, name="find_by_name")])
+        self.validate([read(self.agy / "mcp", name="list_dir")])
+        # Writes to schema directory remain denied
+        with self.assertRaises(ValueError):
+            self.validate([read(self.schema.parent, name="write_to_file")])
+        with self.assertRaises(ValueError):
+            self.validate([read(self.schema.parent / "new.json", name="write_to_file")])
+
 
     def test_traversal_alias_symlink_and_empty_or_hardlinked_files_are_rejected(self):
         for path in (str(self.schema.parent / "../future-server/fetch_v2.json"),

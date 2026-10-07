@@ -62,7 +62,7 @@ class DeliveryConfig:
 
 
 OFFICIAL_IMAGE_HOSTS = (
-    "www.bccard.com", "www.hanacard.co.kr", "m.hanacard.co.kr",
+    "www.bccard.com", "corp.bccard.com", "www.hanacard.co.kr", "m.hanacard.co.kr",
     "www.hyundaicard.com", "img.hyundaicard.com",
     "card.kbcard.com", "img1.kbcard.com", "img2.kbcard.com",
     "www.lottecard.co.kr", "image.lottecard.co.kr",

@@ -88,9 +88,12 @@ class HandoffPublisher:
         self.delivery_repo.save_handoff(handoff)
         if mode == "handoff":
             self._publish(handoff, raw, files)
+        from researchops.delivery.policy import recipient_visibility
+        visibility = recipient_visibility(task_def)
         self.state_repo.save_audit_event(AuditEvent(entity_type="handoff", entity_id=handoff_id,
             event_type="handoff_" + handoff.status,
-            details={"mode":mode, "idempotency_key":key, "recipient_group_id":handoff.recipient_group_id}))
+            details={"mode":mode, "idempotency_key":key, "recipient_group_id":handoff.recipient_group_id,
+                     "recipient_visibility": visibility}))
         # The orchestrator owns final run archive publication after this method returns.
         return handoff
 

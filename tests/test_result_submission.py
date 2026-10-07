@@ -83,6 +83,245 @@ class ResultSubmissionTests(unittest.TestCase):
                     submit_result(value, stage, tmp)
                 self.assertEqual(list(Path(tmp).iterdir()), [])
 
+    def test_compose_html_tag_balance_presubmit_validation(self):
+        compose_base = document("compose")
+
+        # 1. 5 Hyundai items followed by extra closing </div> tags
+        hyundai_extra_div = (
+            '<html><head></head><body data-local-date="2026-09-10">\n'
+            '<div class="card-list">\n'
+            '  <div class="card-1">현대 181109</div>\n'
+            '  <div class="card-2">현대 181110</div>\n'
+            '  <div class="card-3">현대 181111</div>\n'
+            '  <div class="card-4">현대 181112</div>\n'
+            '  <div class="card-5">현대 181113</div>\n'
+            '</div></div>\n'
+            '</body></html>'
+        )
+        bad_doc = {**compose_base, "html": hyundai_extra_div}
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(ResponseTransportError) as caught:
+                submit_result(bad_doc, "compose", tmp)
+            error = caught.exception
+            self.assertEqual(error.code, "submission_html_unbalanced")
+            self.assertEqual(error.stage, "compose_html")
+            self.assertEqual(error.line, 8)
+            self.assertEqual(error.column, 7)
+            self.assertEqual(hyundai_extra_div[error.offset:error.offset + 6], "</div>")
+            self.assertNotIn("현대", str(error))
+            self.assertNotIn("card", str(error))
+            self.assertEqual(list(Path(tmp).iterdir()), [])
+
+        # 2. Last KB item with unclosed start tag at EOF
+        kb_unclosed_eof = (
+            '<html><head></head><body data-local-date="2026-09-10">\n'
+            '<div class="card-list">\n'
+            '  <div class="card-hyundai">현대 181109</div>\n'
+            '</div>\n'
+            '<div class="card-kb">\n'
+            '  <p>KB 국민카드 안내</p>'
+        )
+        bad_kb_doc = {**compose_base, "html": kb_unclosed_eof}
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(ResponseTransportError) as caught:
+                submit_result(bad_kb_doc, "compose", tmp)
+            error = caught.exception
+            self.assertEqual(error.code, "submission_html_unbalanced")
+            self.assertEqual(error.stage, "compose_html")
+            self.assertEqual(error.line, 5)
+            self.assertEqual(error.column, 1)
+            self.assertEqual(kb_unclosed_eof[error.offset:error.offset + 4], "<div")
+            self.assertNotIn("국민카드", str(error))
+            self.assertNotIn("card-kb", str(error))
+            self.assertEqual(list(Path(tmp).iterdir()), [])
+
+        # 3. Mismatched nesting
+        mismatched_html = '<html><head></head><body data-local-date="2026-09-10"><div><p>내용</div></p></body></html>'
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(ResponseTransportError) as caught:
+                submit_result({**compose_base, "html": mismatched_html}, "compose", tmp)
+            error = caught.exception
+            self.assertEqual(error.code, "submission_html_unbalanced")
+            self.assertEqual(error.stage, "compose_html")
+            self.assertEqual(mismatched_html[error.offset:error.offset + 6], "</div>")
+
+        # 4. Void tags and self-closing tags pass cleanly
+        void_html = (
+            '<html><head><meta charset="utf-8"></head>'
+            '<body data-local-date="2026-09-10">'
+            '<img src="cid:card-plate.png" alt="카드 앞면">'
+            '<br><hr>'
+            '<div />'
+            '<p>설명<br/>끝</p>'
+            '</body></html>'
+        )
+        raw, files = prepare_result({**compose_base, "html": void_html}, "compose")
+        self.assertIn(b"cid:card-plate.png", files["email.html"])
+
+        # 5. Normal nested tables and CID images pass cleanly
+        table_html = (
+            '<html><head></head><body data-local-date="2026-09-10">'
+            '<table border="0"><tr><td>'
+            '<img src="cid:plate.png" alt="플레이트"><br>'
+            '<span>혜택 안내</span>'
+            '</td></tr></table>'
+            '</body></html>'
+        )
+        raw, files = prepare_result({**compose_base, "html": table_html}, "compose")
+        self.assertIn("혜택 안내".encode("utf-8"), files["email.html"])
+
+        # 6. Single-line HTML with Korean text and tags
+        single_line_bad = '<html><body><span>안내: 현대카드 &amp; KB국민카드</span></div></body></html>'
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(ResponseTransportError) as caught:
+                submit_result({**compose_base, "html": single_line_bad}, "compose", tmp)
+            error = caught.exception
+            self.assertEqual(error.code, "submission_html_unbalanced")
+            self.assertEqual(error.stage, "compose_html")
+            self.assertEqual(error.line, 1)
+            self.assertEqual(single_line_bad[error.offset:error.offset + 6], "</div>")
+            self.assertNotIn("현대카드", str(error))
+            self.assertNotIn("KB국민카드", str(error))
+
+        # 7. Research stage does not check HTML tag balance
+        research_doc = document("research")
+        research_doc["summary"] = "<div>여분 태그가 있어도 Research는 통과</div></div>"
+        raw, files = prepare_result(research_doc, "research")
+        self.assertIn("여분 태그가 있어도".encode("utf-8"), raw)
+
+    def test_compose_html_diagnostic_offsets_across_line_terminators(self):
+        compose_base = document("compose")
+        # Reviewer exact reproduction cases: offset must be 15, line must be 2, col must be 1
+        repro_cr = "<html>\r<div>한글\n</span></div></html>"
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(ResponseTransportError) as caught:
+                submit_result({**compose_base, "html": repro_cr}, "compose", tmp)
+            err = caught.exception
+            self.assertEqual(err.code, "submission_html_unbalanced")
+            self.assertEqual(err.stage, "compose_html")
+            self.assertEqual(err.line, 2)
+            self.assertEqual(err.column, 1)
+            self.assertEqual(err.offset, 15)
+            self.assertEqual(repro_cr[err.offset:err.offset + 7], "</span>")
+            self.assertEqual(repro_cr.split("\n")[err.line - 1][err.column - 1:err.column - 1 + 7], "</span>")
+            self.assertEqual(list(Path(tmp).iterdir()), [])
+
+        repro_u2028 = "<html>\u2028<div>한글\n</span></div></html>"
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(ResponseTransportError) as caught:
+                submit_result({**compose_base, "html": repro_u2028}, "compose", tmp)
+            err = caught.exception
+            self.assertEqual(err.code, "submission_html_unbalanced")
+            self.assertEqual(err.stage, "compose_html")
+            self.assertEqual(err.line, 2)
+            self.assertEqual(err.column, 1)
+            self.assertEqual(err.offset, 15)
+            self.assertEqual(repro_u2028[err.offset:err.offset + 7], "</span>")
+            self.assertEqual(repro_u2028.split("\n")[err.line - 1][err.column - 1:err.column - 1 + 7], "</span>")
+            self.assertEqual(list(Path(tmp).iterdir()), [])
+
+        # Comprehensive matrix of line terminators: \n, \r\n, \r, \u2028
+        expected_mismatch = {
+            "\n": (3, 1, 21),
+            "\r\n": (3, 1, 22),
+            "\r": (2, 1, 21),
+            "\u2028": (2, 1, 21),
+        }
+        expected_unclosed = {
+            "\n": (2, 1, 7),
+            "\r\n": (2, 1, 8),
+            "\r": (1, 8, 7),
+            "\u2028": (1, 8, 7),
+        }
+
+        for sep in ("\n", "\r\n", "\r", "\u2028"):
+            with self.subTest(terminator=repr(sep)):
+                exp_line, exp_col, exp_off = expected_mismatch[sep]
+                # Case A: Mismatched end tag with Korean text preceding the tag
+                html_mismatch = f"<html>{sep}<div>한글 카드 안내\n</span></div></html>"
+                with tempfile.TemporaryDirectory() as tmp:
+                    with self.assertRaises(ResponseTransportError) as caught:
+                        submit_result({**compose_base, "html": html_mismatch}, "compose", tmp)
+                    err = caught.exception
+                    self.assertEqual(err.code, "submission_html_unbalanced")
+                    self.assertEqual(err.stage, "compose_html")
+                    self.assertEqual(err.line, exp_line)
+                    self.assertEqual(err.column, exp_col)
+                    self.assertEqual(err.offset, exp_off)
+                    self.assertEqual(html_mismatch[err.offset:err.offset + 7], "</span>")
+                    lines = html_mismatch.split("\n")
+                    self.assertEqual(lines[err.line - 1][err.column - 1:err.column - 1 + 7], "</span>")
+                    self.assertNotIn("한글", str(err))
+                    self.assertNotIn("카드", str(err))
+                    self.assertEqual(list(Path(tmp).iterdir()), [])
+
+                # Case B: Unclosed start tag with Korean text
+                exp_u_line, exp_u_col, exp_u_off = expected_unclosed[sep]
+                html_unclosed = f"<html>{sep}<div class=\"unclosed\">한글 카드 안내"
+                with tempfile.TemporaryDirectory() as tmp:
+                    with self.assertRaises(ResponseTransportError) as caught:
+                        submit_result({**compose_base, "html": html_unclosed}, "compose", tmp)
+                    err = caught.exception
+                    self.assertEqual(err.code, "submission_html_unbalanced")
+                    self.assertEqual(err.stage, "compose_html")
+                    self.assertEqual(err.line, exp_u_line)
+                    self.assertEqual(err.column, exp_u_col)
+                    self.assertEqual(err.offset, exp_u_off)
+                    self.assertEqual(html_unclosed[err.offset:err.offset + 22], "<div class=\"unclosed\">")
+                    lines_u = html_unclosed.split("\n")
+                    self.assertEqual(lines_u[err.line - 1][err.column - 1:err.column - 1 + 22], "<div class=\"unclosed\">")
+                    self.assertNotIn("한글", str(err))
+                    self.assertNotIn("카드", str(err))
+                    self.assertEqual(list(Path(tmp).iterdir()), [])
+
+    def test_in_session_repair_and_resubmission_flow(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            helper = stage_submission_helper(root)
+            submission_dir = root / SUBMISSION_DIRECTORY
+            bad_doc = document("compose")
+            bad_doc["html"] = (
+                '<html><head></head><body data-local-date="2026-09-10">\n'
+                '<div><p>미종결 태그\n'
+                '</body></html>'
+            )
+            code = (
+                "import sys, json, os\n"
+                "from pathlib import Path\n"
+                "sys.path.insert(0, sys.argv[1])\n"
+                "from researchops.runners.result_submission import submit_result\n"
+                "from researchops.runners.response_transport import ResponseTransportError\n"
+                "doc = json.load(sys.stdin)\n"
+                "sub_dir = sys.argv[2]\n"
+                "sub_file = Path(sub_dir) / 'submission.json'\n"
+                "try:\n"
+                "    submit_result(doc, 'compose', sub_dir)\n"
+                "    sys.exit(10)\n"
+                "except ResponseTransportError as exc:\n"
+                "    if exc.code != 'submission_html_unbalanced' or exc.stage != 'compose_html':\n"
+                "        sys.exit(11)\n"
+                "if sub_file.exists():\n"
+                "    sys.exit(12)\n"
+                "# Repair the HTML in the same worker session\n"
+                "doc['html'] = '<html><head></head><body data-local-date=\"2026-09-10\"><div><p>수정 완료</p></div></body></html>'\n"
+                "envelope = submit_result(doc, 'compose', sub_dir)\n"
+                "print(envelope)\n"
+            )
+            result = subprocess.run([sys.executable, "-I", "-c", code, str(helper), str(submission_dir)],
+                                    input=json.dumps(bad_doc, ensure_ascii=False).encode("utf-8"),
+                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=root)
+            self.assertEqual(result.returncode, 0, f"Subprocess failed:\nstdout: {result.stdout.decode()}\nstderr: {result.stderr.decode()}")
+            envelope = json.loads(result.stdout)
+            self.assertEqual(envelope["transport_version"], 2)
+            self.assertEqual(envelope["response_file"], "submission.json")
+            sub_file = submission_dir / "submission.json"
+            self.assertTrue(sub_file.exists())
+            raw_bytes = sub_file.read_bytes()
+            self.assertEqual(hashlib.sha256(raw_bytes).hexdigest(), envelope["sha256"])
+            self.assertEqual(len(raw_bytes), envelope["size_bytes"])
+            saved_doc = json.loads(raw_bytes.decode("utf-8"))
+            self.assertEqual(saved_doc["html"], '<html><head></head><body data-local-date="2026-09-10"><div><p>수정 완료</p></div></body></html>')
+
     def test_exact_limit_and_one_extra_byte(self):
         value = {"x": "x" * (1_000_000 - len(json.dumps({"x": ""}).encode()))}
         raw, files = prepare_result(value, "research")

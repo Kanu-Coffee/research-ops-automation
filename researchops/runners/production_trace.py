@@ -206,6 +206,8 @@ class ProductionToolTraceCollector:
                 'Invalid Antigravity finish completion': 'invalid_finish_completion',
                 'Invalid or duplicate Antigravity finish index': 'invalid_finish_index',
                 'Antigravity finish cannot complete another tool': 'finish_tool_identity_mismatch',
+                'Unapproved Antigravity subagent action': 'unapproved_subagent_action',
+                'Unapproved Antigravity action': 'unapproved_action',
             }.get(str(exc), 'invalid_lifecycle_event')
             self._fail("trace_invalid_lifecycle")
         self._count += 1
@@ -382,7 +384,7 @@ class ProductionToolTraceCollector:
         name = _text(step.get("step_type"), limit=128)
         if consume_agy_finish(step, self._pending, self._seen):
             return
-        if name in {"user_input", "agent_response", "checkpoint"}:
+        if name in {"user_input", "agent_response", "checkpoint", "system_message"}:
             if name == "agent_response":
                 self._activity = self._activity or any(isinstance(step.get(key), str) and bool(step[key].strip())
                                                        for key in ("text", "text_delta"))
@@ -397,11 +399,15 @@ class ProductionToolTraceCollector:
             if "ANTIGRAVITY_ERROR_MESSAGE" not in self._warnings:
                 self._warnings.append("ANTIGRAVITY_ERROR_MESSAGE")
             return
+        if name == "subagent":
+            raise ValueError("Unapproved Antigravity subagent action")
         if name != "tool":
             raise ValueError("Unapproved Antigravity action")
         if state not in {"ACTIVE", "DONE", "ERROR"} or type(index) is not int or index < 0 or index in self._seen:
             raise ValueError("Invalid or duplicate Antigravity tool step")
         info, name = step.get("tool_info"), _text(step.get("tool_name"), limit=128)
+        if name in {"invoke_subagent", "define_subagent", "manage_subagents", "send_message"}:
+            raise ValueError("Unapproved Antigravity subagent action")
         if not isinstance(info, dict) or info.get("name") != name:
             raise ValueError("Invalid Antigravity tool evidence")
         if index in self._pending and self._pending[index]["name"] != name:

@@ -84,6 +84,24 @@ class TaskEditorFlowTests(unittest.TestCase):
         self.assertNotIn("/tasks/drafts", body)
         self.assertNotIn("임시 저장", body)
 
+    def test_recipient_visibility_checkbox_rendering_and_defaults(self):
+        # New task: default unchecked
+        body = self.render()
+        fields = OperatorForms(body).find("/tasks/production/create")
+        self.assertNotIn("recipient_visibility", fields)
+        self.assertIn('name="recipient_visibility"', body)
+        self.assertIn('<input type="checkbox" name="recipient_visibility" value="bcc"', body)
+        self.assertNotIn('<input type="checkbox" name="recipient_visibility" value="bcc" checked', body)
+
+        # Edit task with bcc: checked, summary shows '숨은참조(BCC)'
+        value_bcc = {"task_id": "bcc-task", "name": "BCC Task", "recipient_visibility": "bcc",
+                     "recipient_group_id": "group-opaque"}
+        body_bcc = self.render(value_bcc, mode="edit")
+        fields_bcc = OperatorForms(body_bcc).find("/tasks/bcc-task/edit")
+        self.assertEqual(fields_bcc.get("recipient_visibility"), "bcc")
+        self.assertIn('<input type="checkbox" name="recipient_visibility" value="bcc" checked>', body_bcc)
+        self.assertIn("숨은참조(BCC)", body_bcc)
+
 
 if __name__ == "__main__":
     unittest.main()

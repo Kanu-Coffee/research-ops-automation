@@ -146,7 +146,9 @@ class ResponseTransportTests(unittest.TestCase):
 
     def test_public_diagnostic_constructor_only_allows_fixed_categories_and_positions(self):
         self.assertIn("submission_file_unsafe", RESPONSE_DIAGNOSTIC_CODES)
+        self.assertIn("submission_html_unbalanced", RESPONSE_DIAGNOSTIC_CODES)
         self.assertIn("submission", RESPONSE_DIAGNOSTIC_STAGES)
+        self.assertIn("compose_html", RESPONSE_DIAGNOSTIC_STAGES)
         for kwargs in ({"code": "synthetic-secret-value", "stage": "envelope"},
                        {"code": "inner_json_invalid", "stage": "private_payload_key"},
                        {"code": "inner_json_invalid", "stage": "inner_json", "offset": True}):

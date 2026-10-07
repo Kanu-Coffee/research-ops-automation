@@ -11,3 +11,7 @@ Web에서 Gmail/STARTTLS 587, 일반 SMTP/STARTTLS 또는 implicit TLS 465를 �
 비밀번호·토큰을 명령행 인수, 저장소, 일반 로그 또는 worker 환경에 넣지 않습니다. CLI 비밀번호 변경에는 `researchctl delivery config --set-password`의 숨김 입력을 사용합니다. DB 백업에는 계정·소유권·세션 정보가 포함되고 별도의 delivery 설정에는 실제 주소·SMTP 비밀번호가 있으므로 백업도 private하게 보관합니다.
 
 외부 filesystem outbox와 receipt 호환 경로도 남아 있습니다. SMTP의 로컬 검증과 외부 receipt를 같은 신뢰 근거로 취급하지 않으며 [외부 delivery 예제](../examples/external-delivery/README.md)를 참고합니다.
+
+## 수신자 헤더 공개 설정
+
+Task의 `delivery.recipient_visibility`는 생략 또는 `to`가 기본입니다. `bcc`를 선택하면 SMTP envelope에는 그룹 전체 주소를 유지하고 메일에는 `To: undisclosed-recipients:;`를 사용하며 Bcc 헤더를 넣지 않습니다. 이 설정은 Task 불변 버전에 고정되며 재시도에도 유지됩니다. 다른 값은 거부합니다. Web 일반 편집의 숨은참조 체크박스에서 설정합니다.

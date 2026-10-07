@@ -10,26 +10,35 @@ import json
 from pathlib import Path
 import smtplib
 import ssl
+import time
 from typing import Optional
 import uuid
 from zoneinfo import ZoneInfo
 
 from researchops.delivery.package import validate_outbox, read_file, publish_package
-from researchops.delivery.policy import require_approval, require_live, sender_for_task_version
+from researchops.delivery.policy import (require_approval, require_live, sender_for_task_version,
+    recipient_visibility_for_task_version)
 from researchops.delivery.queue import SmtpQueue
 from researchops.delivery.smtp_config import (SmtpSettings, BuiltinDeliveryConfig,
     delivery_revision, load_delivery_config, preserve_sender_passwords, save_delivery_config, validate_address)
 from researchops.errors import DeliveryError
 
+_NO_RECEIPT_SPECIFIED = object()
+
 
 class SmtpDispatcher:
-    def __init__(self, settings, receipt_consumer, delivery_repo, state_repo, config_file=None):
+    def __init__(self, settings, receipt_consumer, delivery_repo, state_repo, config_file=None,
+                 *, reconcile_interval: float = 60.0, reconcile_batch_size: int = 100):
         self.settings = settings
         self.receipt_consumer = receipt_consumer
         self.delivery_repo = delivery_repo
         self.state_repo = state_repo
         self.config_file = config_file or settings.paths.delivery_config_file
         self.queue = SmtpQueue(delivery_repo.db)
+        self._last_reconciled_at: Optional[float] = None
+        self._reconcile_interval: float = reconcile_interval
+        self._reconcile_cursor: Optional[tuple[str, str]] = None
+        self._reconcile_batch_size: int = reconcile_batch_size
 
     def get_config(self) -> BuiltinDeliveryConfig:
         return load_delivery_config(self.config_file)
@@ -133,12 +142,17 @@ class SmtpDispatcher:
         return response[0]
 
     @staticmethod
-    def _mime(request, files, smtp, recipients, message_id):
+    def _mime(request, files, smtp, recipients, message_id, *, visibility="to"):
+        if visibility not in ("to", "bcc"):
+            raise DeliveryError(f"Invalid recipient visibility: {visibility!r} (must be 'to' or 'bcc')")
         digest = hashlib.sha256(message_id.encode()).hexdigest()[:16]
         root = MIMEMultipart("mixed", boundary="ro-mix-" + digest)
         root["Subject"] = request["subject"]
         root["From"] = formataddr((smtp.sender_name, smtp.sender_email or smtp.username))
-        root["To"] = ", ".join(recipients)
+        if visibility == "bcc":
+            root["To"] = "undisclosed-recipients:;"
+        else:
+            root["To"] = ", ".join(recipients)
         created = datetime.fromisoformat(request["created_at"].replace("Z", "+00:00"))
         root["Date"] = format_datetime(created.astimezone(ZoneInfo("Asia/Seoul")))
         root["Message-ID"] = message_id
@@ -227,10 +241,11 @@ class SmtpDispatcher:
         handoff = self.delivery_repo.get_handoff(handoff_id)
         request, files = self._check_handoff(handoff, config)
         sender_profile_id = sender_for_task_version(self.delivery_repo.db, handoff.task_id, handoff.task_version_hash)
+        visibility = recipient_visibility_for_task_version(self.delivery_repo.db, handoff.task_id, handoff.task_version_hash)
         smtp = config.get_sender(sender_profile_id)
         recipients = config.recipient_groups[handoff.recipient_group_id]
         message_id = "<ro-" + hashlib.sha256(handoff.idempotency_key.encode()).hexdigest() + "@researchops.local>"
-        mime = self._mime(request, files, smtp, recipients, message_id)
+        mime = self._mime(request, files, smtp, recipients, message_id, visibility=visibility)
         if len(mime) > self.settings.delivery.max_message_bytes:
             raise DeliveryError("Encoded SMTP MIME exceeds the configured message size limit")
         envelope = {"sender": smtp.sender_email or smtp.username, "recipients": recipients,
@@ -258,7 +273,7 @@ class SmtpDispatcher:
                 "body": {"text": {"path": "email.txt"}, "html": {"path": "email.html"}}, "attachments": []}
             files = {"email.txt": b"ResearchOps SMTP test. Success means SMTP server acceptance.",
                      "email.html": b"<html><body><p>ResearchOps SMTP test. Success means SMTP server acceptance.</p></body></html>"}
-            mime = self._mime(request, files, smtp, [to_email], message_id)
+            mime = self._mime(request, files, smtp, [to_email], message_id, visibility="to")
             self.queue.enqueue(job_id, None, message_id, mime,
                 {"sender": smtp.sender_email or smtp.username, "recipients": [to_email], "test": True,
                  "sender_profile_id": sender_profile_id}, delivery_revision(config, sender_profile_id, db=self.delivery_repo.db))
@@ -389,8 +404,9 @@ class SmtpDispatcher:
             request, files = self._check_handoff(handoff, config, retry=retry)
             if sender_profile_id != sender_for_task_version(self.delivery_repo.db, handoff.task_id, handoff.task_version_hash):
                 raise DeliveryError("SMTP sender profile differs from the immutable task version")
+            visibility = recipient_visibility_for_task_version(self.delivery_repo.db, handoff.task_id, handoff.task_version_hash)
             recipients = config.recipient_groups[handoff.recipient_group_id]
-            expected = self._mime(request, files, smtp, recipients, job["message_id"])
+            expected = self._mime(request, files, smtp, recipients, job["message_id"], visibility=visibility)
             expected_envelope = {"sender": smtp.sender_email or smtp.username, "recipients": recipients}
             if "sender_profile_id" in envelope:
                 expected_envelope["sender_profile_id"] = sender_profile_id
@@ -501,44 +517,116 @@ class SmtpDispatcher:
         self.archive_attempt(job_id)
         return result == "connection_ok",None,"SMTP TLS/authentication connection verified; no message sent" if result == "connection_ok" else error
 
-    def archive_attempt(self,job_id):
+    def archive_attempt(self, job_or_id, *, receipt_json=_NO_RECEIPT_SPECIFIED):
         """Immutable evidence sidecar; failures never reset or retransmit a SMTP attempt."""
-        job = self.queue.get(job_id)
-        if not job or job["status"] in ("queued","sending"):
+        if isinstance(job_or_id, dict):
+            job = job_or_id
+            job_id = job["job_id"]
+        else:
+            job_id = job_or_id
+            job = self.queue.get_metadata(job_id)
+        if not job or job.get("status") in ("queued", "sending"):
             return False
-        fields = ("job_id","handoff_id","status","phase","message_id","mime_sha256","config_revision",
-                  "created_at","updated_at","error","server_reply")
-        attempt = {key:job[key] for key in fields}
+        fields = ("job_id", "handoff_id", "status", "phase", "message_id", "mime_sha256", "config_revision",
+                  "created_at", "updated_at", "error", "server_reply")
+        attempt = {key: job[key] for key in fields}
         if job.get("diagnostics_json") or job.get("parent_job_id"):
-            attempt.update({key:job[key] for key in ("parent_job_id","attempt_number","next_attempt_at","error_code","retryable")})
+            attempt.update({key: job[key] for key in ("parent_job_id", "attempt_number", "next_attempt_at", "error_code", "retryable")})
             attempt["diagnostics"] = json.loads(job["diagnostics_json"]) if job["diagnostics_json"] else None
-        files = {"attempt.json":json.dumps(attempt,sort_keys=True,indent=2).encode()}
-        if job["handoff_id"]:
-            conn = self.delivery_repo.db.get_connection()
-            try:
-                receipt = conn.execute("SELECT receipt_json FROM delivery_receipts WHERE external_receipt_id=?",
-                    ("smtp-" + job_id,)).fetchone()
-                if receipt:
-                    files["receipt.json"] = receipt[0].encode()
-            finally:
-                conn.close()
-        manifest = {"schema_version":1,"job_id":job_id,"files":[{"path":name,"size_bytes":len(content),
-            "sha256":hashlib.sha256(content).hexdigest()} for name,content in files.items()]}
+        files = {"attempt.json": json.dumps(attempt, sort_keys=True, indent=2).encode()}
+        if job.get("handoff_id"):
+            if receipt_json is not _NO_RECEIPT_SPECIFIED:
+                if receipt_json:
+                    files["receipt.json"] = receipt_json.encode() if isinstance(receipt_json, str) else receipt_json
+            else:
+                conn = self.delivery_repo.db.get_connection()
+                try:
+                    receipt = conn.execute("SELECT receipt_json FROM delivery_receipts WHERE external_receipt_id=?",
+                        ("smtp-" + job_id,)).fetchone()
+                    if receipt:
+                        files["receipt.json"] = receipt[0].encode()
+                finally:
+                    conn.close()
+        manifest = {"schema_version": 1, "job_id": job_id, "files": [{"path": name, "size_bytes": len(content),
+            "sha256": hashlib.sha256(content).hexdigest()} for name, content in files.items()]}
         try:
-            publish_package(self.settings.paths.receipts_dir,job_id,
-                json.dumps(manifest,sort_keys=True,indent=2).encode(),files,request_name="attempt-manifest.json")
+            publish_package(self.settings.paths.receipts_dir, job_id,
+                json.dumps(manifest, sort_keys=True, indent=2).encode(), files, request_name="attempt-manifest.json")
             return True
-        except (OSError,DeliveryError):
+        except (OSError, DeliveryError):
             return False
 
-    def dispatch_all_pending(self):
-        self.queue.recover_interrupted()
-        for completed in self.queue.completed():
-            self.archive_attempt(completed["job_id"])
+    def reconcile_completed_attempts(self, *, force: bool = False, full: bool = False) -> int:
+        """Reconcile completed attempts to ensure all terminal jobs have valid evidence sidecars.
+
+        Runs at initial startup and on a slow cadence (e.g. 60s) using monotonic time.
+        Reads only metadata fields (never mime_bytes or envelope_json).
+        """
+        now = time.monotonic()
+        if not force and self._last_reconciled_at is not None and (now - self._last_reconciled_at) < self._reconcile_interval:
+            return 0
+        self._last_reconciled_at = now
+
+        if full:
+            cursor_updated_at = None
+            cursor_job_id = None
+            limit = None
+        else:
+            cursor_updated_at, cursor_job_id = self._reconcile_cursor if self._reconcile_cursor else (None, None)
+            limit = self._reconcile_batch_size
+
+        batch = self.queue.completed(cursor_updated_at=cursor_updated_at, cursor_job_id=cursor_job_id, limit=limit)
+        if not batch and cursor_updated_at is not None:
+            # Wrapped around: restart from beginning
+            self._reconcile_cursor = None
+            batch = self.queue.completed(limit=limit)
+
+        if not batch:
+            self._reconcile_cursor = None
+            return 0
+
+        if limit is not None and len(batch) >= limit:
+            last = batch[-1]
+            self._reconcile_cursor = (last["updated_at"], last["job_id"])
+        else:
+            self._reconcile_cursor = None
+
+        handoff_job_ids = [j["job_id"] for j in batch if j.get("handoff_id")]
+        receipts_map = {}
+        if handoff_job_ids:
+            conn = self.delivery_repo.db.get_connection()
+            try:
+                placeholders = ",".join("?" for _ in handoff_job_ids)
+                external_ids = ["smtp-" + jid for jid in handoff_job_ids]
+                rows = conn.execute(
+                    f"SELECT external_receipt_id, receipt_json FROM delivery_receipts WHERE external_receipt_id IN ({placeholders})",
+                    external_ids
+                ).fetchall()
+                receipts_map = {r[0]: r[1] for r in rows}
+            finally:
+                conn.close()
+
+        reconciled_count = 0
+        for job in batch:
+            jid = job["job_id"]
+            rcpt_key = "smtp-" + jid
+            rcpt_json = receipts_map.get(rcpt_key) if rcpt_key in receipts_map else None
+            if self.archive_attempt(job, receipt_json=rcpt_json):
+                reconciled_count += 1
+
+        return reconciled_count
+
+    def dispatch_all_pending(self, *, force_reconcile: bool = False):
+        recovered = self.queue.recover_interrupted()
+        for job_id in recovered:
+            self.archive_attempt(job_id)
+
+        self.reconcile_completed_attempts(force=force_reconcile)
+
         results = []
         # Only durable DB handoffs are candidates; unregistered filesystem directories are ignored.
         for handoff in self.delivery_repo.list_handoffs(status="published"):
-            if not self.queue.get(handoff.handoff_id):
+            if not self.queue.get_metadata(handoff.handoff_id):
                 try:
                     self.enqueue_handoff(handoff.handoff_id)
                 except Exception as exc:
