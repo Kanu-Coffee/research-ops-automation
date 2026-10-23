@@ -558,6 +558,72 @@ class TestWebUI(unittest.TestCase):
             self.assertEqual(status, 303)
             self.assertIn("success=Connected%21", headers.get("Location", ""))
 
+    def test_production_create_persists_http_option_from_form(self):
+        from researchops.delivery.smtp_config import BuiltinDeliveryConfig
+        self.app.settings.environment = "production"
+        self.app.delivery.save_delivery_config(BuiltinDeliveryConfig(
+            recipient_groups={"research-team": ["reader@example.test"]}))
+        post = urllib.parse.urlencode({"task_id": "http-ui", "name": "HTTP UI",
+            "instructions": "Research official public card pages.",
+            "runner_type": "codex_exec", "recipient_group_id": "research-team",
+            "allow_http_requests": "true", "launch_mode": "save",
+            "request_key": "http-ui"}).encode()
+        response = self.router.handle_request("POST", "/tasks/production/create", post)
+        self.assertEqual(response[0], 303)
+        version = self.app.task_repo.get_active_version("http-ui")
+        self.assertTrue(version.definition.runner["allow_http_requests"])
+        self.assertTrue(self.app.tasks.get_task_editor("http-ui")["allow_http_requests"])
+
+
+    def test_production_clone_preserves_checked_http_and_unchecked_disables(self):
+        from researchops.delivery.smtp_config import BuiltinDeliveryConfig
+        self.app.settings.environment = "production"
+        self.app.delivery.save_delivery_config(BuiltinDeliveryConfig(
+            recipient_groups={"research-team": ["reader@example.test"]}))
+        source = self.app.tasks.create_production_task(task_id="http-clone-source",
+            name="HTTP source", instructions="Research public sources.",
+            runner_type="codex_exec", recipient_group_id="research-team",
+            schedule_enabled=False, allow_http_requests=True)
+        common = {"name": "HTTP clone", "instructions": "Research public sources.",
+                  "runner_type": "codex_exec", "recipient_group_id": "research-team",
+                  "source_task_id": source.task_id, "source_version_hash": source.version_hash,
+                  "launch_mode": "save"}
+        checked = self.router.handle_request("POST", "/tasks/production/create",
+            urllib.parse.urlencode({**common, "task_id": "http-clone-checked",
+                "allow_http_requests": "true", "request_key": "http-clone-checked"}).encode())
+        self.assertEqual(checked[0], 303)
+        self.assertTrue(self.app.task_repo.get_active_version(
+            "http-clone-checked").definition.runner["allow_http_requests"])
+        unchecked = self.router.handle_request("POST", "/tasks/production/create",
+            urllib.parse.urlencode({**common, "task_id": "http-clone-unchecked",
+                "request_key": "http-clone-unchecked"}).encode())
+        self.assertEqual(unchecked[0], 303)
+        self.assertFalse(self.app.task_repo.get_active_version(
+            "http-clone-unchecked").definition.runner["allow_http_requests"])
+
+
+    def test_production_edit_unchecked_http_disables_existing_option(self):
+        from researchops.delivery.smtp_config import BuiltinDeliveryConfig
+        self.app.settings.environment = "production"
+        self.app.delivery.save_delivery_config(BuiltinDeliveryConfig(
+            recipient_groups={"research-team": ["reader@example.test"]}))
+        source = self.app.tasks.create_production_task(task_id="http-edit-source",
+            name="HTTP edit source", instructions="Research public sources.",
+            runner_type="codex_exec", recipient_group_id="research-team",
+            schedule_enabled=False, allow_http_requests=True)
+        editor = self.app.tasks.get_task_editor(source.task_id)
+        post = urllib.parse.urlencode({"name": "HTTP edited",
+            "instructions": "Research public sources edited.",
+            "runner_type": "codex_exec", "recipient_group_id": "research-team",
+            "expected_version_hash": source.version_hash,
+            "expected_updated_at": editor["expected_updated_at"],
+            "schedule_enabled": "false", "launch_mode": "save"}).encode()
+        response = self.router.handle_request("POST", "/tasks/http-edit-source/edit", post)
+        self.assertEqual(response[0], 303)
+        active = self.app.task_repo.get_active_version("http-edit-source")
+        self.assertFalse(active.definition.runner["allow_http_requests"])
+
+
 
 class TestWebServerLive(unittest.TestCase):
     def setUp(self):

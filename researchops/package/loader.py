@@ -113,10 +113,19 @@ class TaskPackageLoader:
             path_str = ".".join(str(p) for p in err.path) if err.path else "root"
             errors.append(f"task.yaml schema error at {path_str}: {err.message}")
 
+        runner = task_dict.get("runner")
+        if isinstance(runner, dict) and "allow_http_requests" in runner:
+            if type(runner["allow_http_requests"]) is not bool:
+                errors.append("runner.allow_http_requests must be a boolean")
+            elif runner["allow_http_requests"] and runner.get("network_profile") != "public-research":
+                errors.append("runner.allow_http_requests requires network_profile=public-research")
+
         if errors:
             raise ValidationError("Task package schema validation failed", errors=errors)
         from researchops.engine.research_context import validate_context_config
         validate_context_config((task_dict.get("state") or {}).get("research_context"))
+        from researchops.engine.dedupe import validate_entity_aliases
+        validate_entity_aliases((task_dict.get("state") or {}).get("dedupe") or {})
         reserved = {"research-context.json", "delivery-history.json", "composition-input.json"}
         if reserved.intersection(package_files):
             raise ValidationError("Task package cannot replace application-owned execution inputs")

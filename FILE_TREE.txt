@@ -51,6 +51,7 @@ docs/BACKUP_AND_UPGRADE.md
 docs/DECISIONS.md
 docs/EMAIL_RETRY.md
 docs/HARDENING.md
+docs/HTTP_PROXY_ROUTING.md
 docs/LARGE_TRACE_AND_RECIPIENT_ROUTING.md
 docs/MCP_INTEGRATION_PLAN.md
 docs/MEDIA_ARTIFACTS.md
@@ -204,6 +205,8 @@ researchops/runners/development_process.py
 researchops/runners/development_runner.py
 researchops/runners/fake.py
 researchops/runners/file_acquisition.py
+researchops/runners/http_routing.py
+researchops/runners/image_generation.py
 researchops/runners/launcher.py
 researchops/runners/mcp_audit.py
 researchops/runners/native_mcp.py
@@ -212,6 +215,7 @@ researchops/runners/production.py
 researchops/runners/production_trace.py
 researchops/runners/protected_media_fetch.py
 researchops/runners/provider_diagnostics.py
+researchops/runners/public_http.py
 researchops/runners/research_fetch.py
 researchops/runners/research_mcp.py
 researchops/runners/response_transport.py
@@ -352,6 +356,9 @@ tests/test_entity_catalog.py
 tests/test_execution_plan.py
 tests/test_gate_and_dedupe.py
 tests/test_handoff_and_receipt.py
+tests/test_http_image_discovery.py
+tests/test_http_proxy.py
+tests/test_image_generation.py
 tests/test_mcp_audit.py
 tests/test_mcp_diagnostics.py
 tests/test_media_config.py

@@ -412,6 +412,11 @@ def load_settings(config_path: Optional[str | Path] = None) -> Settings:
     validate_web_bind(web, web.bind)
     if any(any(ch in host for ch in ("/", "*", "@", "\r", "\n")) for host in web.allowed_hosts):
         raise ConfigError("web.allowed_hosts must contain literal hostnames")
+    from researchops.runners.http_routing import validate_profiles
+    try:
+        validate_profiles(data.get("http_proxy_profiles", {}))
+    except ValueError as exc:
+        raise ConfigError(str(exc)) from None
     boolean("scheduler", "enabled", True)
     for key, default in (("tick_seconds", 60), ("tick_timeout_seconds", 30),
                          ("stale_lease_seconds", 300), ("max_queued_runs_per_task", 1)):

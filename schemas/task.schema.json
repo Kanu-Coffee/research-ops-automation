@@ -125,6 +125,17 @@
         "network_profile": {
           "$ref": "#/$defs/profileId"
         },
+        "allow_http_requests": {
+          "type": "boolean",
+          "default": false
+        },
+        "http_proxy_profile": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$"
+        },
         "resource_profile": {
           "$ref": "#/$defs/profileId"
         },
@@ -211,7 +222,28 @@
           }
         }
       },
-      "$comment": "Runtime limits are optional operational safeguards. Supported runner types: codex_exec (OpenAI Codex CLI), antigravity_exec (Google Antigravity agy -p CLI), or fake (test doubles). A task requests only an application-approved network profile; it cannot select host-wide access or define its own egress policy.",
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "allow_http_requests": {
+                "const": true
+              }
+            },
+            "required": [
+              "allow_http_requests"
+            ]
+          },
+          "then": {
+            "properties": {
+              "network_profile": {
+                "const": "public-research"
+              }
+            }
+          }
+        }
+      ],
+      "$comment": "Runtime limits are optional operational safeguards. Supported runner types: codex_exec (OpenAI Codex CLI), antigravity_exec (Google Antigravity agy -p CLI), or fake (test doubles). A task requests only an application-approved network profile; it cannot select host-wide access or define its own egress policy. allow_http_requests only grants public read-oriented HTTP access to Research when the network profile is public-research.",
       "additionalProperties": false
     },
     "instructions": {
@@ -399,6 +431,40 @@
               "items": {
                 "type": "string",
                 "minLength": 1
+              }
+            },
+            "entity_aliases": {
+              "type": "array",
+              "maxItems": 128,
+              "description": "Operator-confirmed complete identity equivalences; no name-based inference. Sent rows remain immutable.",
+              "items": {
+                "type": "object",
+                "required": [
+                  "identities",
+                  "evidence"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "identities": {
+                    "type": "array",
+                    "minItems": 2,
+                    "maxItems": 8,
+                    "items": {
+                      "type": "object",
+                      "minProperties": 1,
+                      "additionalProperties": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256
+                      }
+                    }
+                  },
+                  "evidence": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048
+                  }
+                }
               }
             }
           },

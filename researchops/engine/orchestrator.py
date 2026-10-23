@@ -115,6 +115,8 @@ class Orchestrator:
         execution_plan = resolve_run_plan(run, task, self.run_repo)
         delivery_only = execution_plan["scope"] == "delivery_only"
         compose_only = execution_plan["scope"] in {"compose_only", "delivery_only"}
+        from researchops.runners.http_routing import resolve_http_profile
+        http_profile = {} if compose_only else resolve_http_profile(self.settings, task.runner)
         dry_run = bool(force_dry_run or controls.get("force_dry_run") or run.trigger_type == "candidate_dry_run")
         archive = RunArchive(self.settings, run)
         archive.json("execution-plan.json", execution_plan)
@@ -202,6 +204,8 @@ class Orchestrator:
                 reasoning_effort=stage_settings["reasoning_effort"],
                 timeout_seconds=task.runner.get("timeout_seconds", self.settings.runner.default_timeout_seconds),
                 network_profile=task.runner.get("network_profile", "none"),
+                allow_http_requests=task.runner.get("allow_http_requests") is True,
+                http_proxy_profile=copy.deepcopy(http_profile) if stage == "research" else {},
                 resource_profile=task.runner.get("resource_profile", "standard-research"),
                 fencing_token=fencing_token, cancellation_check=cancelled,
                 timezone=run.timezone, local_date=run.local_date,
@@ -416,7 +420,7 @@ class Orchestrator:
                     research_acquisition = ResearchAcquisitionSession(self.settings,
                         run_id=run_id, task_id=task.id, attempt=run.attempt,
                         fencing_token=fencing_token, storage_root=archive.staging / "research-acquisition",
-                        cancellation_check=cancelled)
+                        cancellation_check=cancelled, http_proxy_profile=http_profile)
                 stage_inputs("research", res_dirs[0])
                 invoke("research", res_dirs)
                 phase("validate")
@@ -445,7 +449,7 @@ class Orchestrator:
                     "excluded_records": excluded, "warnings": dedupe_warnings})
                 phase("artifact_acquisition", coarse=False)
                 from researchops.engine.artifact_acquirer import ArtifactAcquirer
-                acquirer = ArtifactAcquirer(self.settings)
+                acquirer = ArtifactAcquirer(self.settings, http_proxy_profile=http_profile)
                 try:
                     acquired = acquirer.acquire(research.artifacts, research.records, reportable, res_dirs[2],
                         run_id=run_id, task_id=task.id, task_version_hash=run.task_version_hash,

@@ -131,6 +131,80 @@ class TestGateAndDedupe(unittest.TestCase):
         self.assertEqual(len(excluded2), 0)
         self.assertEqual(reportable2[0], updated_rec)
 
+    def _alias_task(self):
+        task = self._sample_task_def(dedupe_enabled=True)
+        task.state['dedupe'] = {
+            'enabled': True, 'key_fields': ['issuer', 'product_code'],
+            'content_fields': ['issuer', 'product_code'],
+            'entity_aliases': [{'identities': [
+                {'issuer': 'issuer-a', 'product_code': 'catalog-123'},
+                {'issuer': 'issuer-a', 'product_code': 'type-xyz'}],
+                'evidence': 'Official catalog links both identifiers to one product'}]}
+        return task
+
+
+    def test_alias_matches_both_directions_against_unmodified_history(self):
+        task = self._alias_task()
+        cfg = task.state['dedupe']
+        for previous, incoming in [('catalog-123', 'type-xyz'), ('type-xyz', 'catalog-123')]:
+            old = {'issuer': 'issuer-a', 'product_code': previous}
+            expected = dict(task_id=task.id, entity_key=derive_entity_key(old, cfg['key_fields']),
+                content_fingerprint=derive_content_fingerprint(old, cfg['content_fields']))
+            with patch.object(self.state_repo, 'is_reported_item_unchanged', side_effect=lambda **v: v == expected):
+                reported, excluded, warnings = self.deduplicator.process_records(task, [
+                    dict(old, product_code=incoming, record_id='new-record')])
+            self.assertFalse(reported)
+            self.assertFalse(warnings)
+            self.assertEqual(excluded[0]['_dedupe_match_basis'], 'configured_identity_alias')
+            self.assertEqual(excluded[0]['_matched_entity_key'], expected['entity_key'])
+
+
+    def test_alias_does_not_merge_other_issuer_or_unknown_code_or_similar_name(self):
+        task = self._alias_task()
+        records = [{'issuer': 'issuer-b', 'product_code': 'type-xyz', 'product_name': 'same name'},
+                   {'issuer': 'issuer-a', 'product_code': 'unknown', 'product_name': 'same name'}]
+        old = {'issuer': 'issuer-a', 'product_code': 'catalog-123'}
+        cfg = task.state['dedupe']
+        expected = dict(task_id=task.id, entity_key=derive_entity_key(old, cfg['key_fields']),
+            content_fingerprint=derive_content_fingerprint(old, cfg['content_fields']))
+        with patch.object(self.state_repo, 'is_reported_item_unchanged', side_effect=lambda **v: v == expected):
+            reported, excluded, _ = self.deduplicator.process_records(task, records)
+        self.assertEqual(reported, records)
+        self.assertFalse(excluded)
+
+
+    def test_alias_preserves_changed_content_and_requires_verified_history(self):
+        task = self._alias_task()
+        task.state['dedupe']['content_fields'].append('benefit')
+        cfg = task.state['dedupe']
+        old = {'issuer': 'issuer-a', 'product_code': 'catalog-123', 'benefit': 'old'}
+        incoming = dict(old, product_code='type-xyz', benefit='new')
+        expected = dict(task_id=task.id, entity_key=derive_entity_key(old, cfg['key_fields']),
+            content_fingerprint=derive_content_fingerprint(old, cfg['content_fields']))
+        with patch.object(self.state_repo, 'is_reported_item_unchanged', side_effect=lambda **v: v == expected):
+            reported, excluded, _ = self.deduplicator.process_records(task, [incoming])
+        self.assertEqual(reported, [incoming]); self.assertFalse(excluded)
+        # No verified SMTP history: aliases cannot suppress either identity.
+        with patch.object(self.state_repo, 'is_reported_item_unchanged', return_value=False):
+            reported, excluded, _ = self.deduplicator.process_records(task, [dict(old, product_code='type-xyz')])
+        self.assertEqual(len(reported), 1); self.assertFalse(excluded)
+
+
+    def test_alias_rejects_overlapping_partial_and_unbounded_declarations(self):
+        from copy import deepcopy
+        from researchops.engine.dedupe import validate_entity_aliases
+        from researchops.errors import ValidationError
+        good = self._alias_task().state['dedupe']
+        for kind in ('overlap', 'partial', 'no-evidence', 'too-many'):
+            cfg = deepcopy(good)
+            if kind == 'overlap': cfg['entity_aliases'] *= 2
+            if kind == 'partial': cfg['entity_aliases'][0]['identities'][0].pop('issuer')
+            if kind == 'no-evidence': cfg['entity_aliases'][0]['evidence'] = ' '
+            if kind == 'too-many': cfg['entity_aliases'] *= 129
+            with self.subTest(kind=kind), self.assertRaises(ValidationError):
+                validate_entity_aliases(cfg)
+
+
 
 if __name__ == "__main__":
     unittest.main()

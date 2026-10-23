@@ -61,6 +61,7 @@ REASON_LABELS = {
                     "unsupported_transfer_encoding", "unsupported_content_encoding", "too_many_chunks", "too_many_headers"), "원문 응답을 완전하게 검증하지 못했습니다."),
     **dict.fromkeys(("credential_unavailable", "provider_configuration_invalid"), "보호된 원문 제공자 설정을 확인해야 합니다."),
     **dict.fromkeys(("worker_start_failed", "worker_failed", "worker_cleanup_failed"), "파일 확보 프로세스를 정상적으로 완료하지 못했습니다."),
+    "proxy_connect_failed": "설정된 공개 자료 프록시에 연결하지 못했습니다.",
     "unknown": "진단 사유는 원본 보고서에서 확인하세요.",
 }
 

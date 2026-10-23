@@ -1,10 +1,12 @@
 """Bounded public HTTP(S) fetch, for a future protected research broker.
 
 This is not a forward proxy, a browser, or an operating-runner egress boundary.
-Only GET/HEAD with fixed headers are supported. Each DNS answer and redirect is
+GET/HEAD are supported by default; an explicit policy also permits JSON POST.
+Each DNS answer and redirect is
 checked before connecting to a pinned numeric address; HTTPS still verifies the
-original hostname. No environment proxy, cookie jar, caller headers, request
-body, credentials, automatic decompression, or executable content is used.
+original hostname. An operator-selected, authentication-free loopback CONNECT
+proxy may be used for label-bounded host patterns, still pinning the target IP.
+Environment proxies, cookies, authentication and active content are not used.
 
 The public API runs its trusted, standard-library-only transport in a short-lived
 process. Its deadline therefore also bounds libc DNS and slow/dripping responses.
@@ -56,8 +58,14 @@ class FetchPolicy:
     max_chunk_count: int = 4096
     allowed_hosts: tuple[str, ...] = ()
     require_https: bool = False
+    proxy_url: str | None = None
+    proxy_host_patterns: tuple[str, ...] = ()
+    allow_json_post: bool = False
 
     def __post_init__(self):
+        validate_proxy_policy(self.proxy_url, self.proxy_host_patterns)
+        if type(self.allow_json_post) is not bool:
+            raise ValueError("Invalid JSON POST policy")
         if (type(self.require_https) is not bool or
                 not isinstance(self.allowed_hosts, (tuple, list)) or len(self.allowed_hosts) > 128 or
                 any(not isinstance(host, str) or len(host) > 253 or "." not in host or
@@ -77,6 +85,36 @@ class FetchPolicy:
             value = getattr(self, name)
             if type(value) is not int or not minimum <= value <= maximum:
                 raise ValueError(f"{name} is outside the supported range")
+
+
+def validate_proxy_policy(proxy_url, patterns):
+    if not isinstance(patterns, (list, tuple)) or len(patterns) > 64:
+        raise ValueError("Invalid proxy host patterns")
+    for pattern in patterns:
+        host = pattern[2:] if isinstance(pattern, str) and pattern.startswith("*.") else pattern
+        if (not isinstance(host, str) or not host or len(host) > 253 or "." not in host or
+                host != host.lower() or any(not _LABEL.fullmatch(x) for x in host.split("."))):
+            raise ValueError("Invalid proxy host pattern")
+    if proxy_url is None:
+        if patterns:
+            raise ValueError("Proxy patterns require an endpoint")
+        return
+    try:
+        value = urlsplit(proxy_url)
+        address = ipaddress.ip_address(value.hostname or "")
+        if (value.scheme != "http" or not address.is_loopback or not value.port or
+                value.username is not None or value.password is not None or
+                value.path not in ("", "/") or value.query or value.fragment or
+                any(ord(c) <= 32 or ord(c) == 127 for c in proxy_url) or not patterns):
+            raise ValueError
+    except (ValueError, TypeError, AttributeError):
+        raise ValueError("Proxy must be an authentication-free loopback HTTP origin") from None
+
+
+def uses_proxy(hostname, policy):
+    return bool(policy.proxy_url and any(
+        hostname.endswith("." + pattern[2:]) if pattern.startswith("*.") else hostname == pattern
+        for pattern in policy.proxy_host_patterns))
 
 
 class ResearchFetchError(Exception):
@@ -263,6 +301,48 @@ def _connect(target: _Target, addresses: tuple[str, ...], policy: FetchPolicy,
     raise ResearchFetchError("connection_failed")
 
 
+def _connect_proxy(target, addresses, policy, deadline):
+    """CONNECT to a locally validated numeric target; verify origin TLS/SNI."""
+    if target.scheme != "https":
+        raise ResearchFetchError("https_required")
+    proxy = urlsplit(policy.proxy_url)
+    proxy_address = ipaddress.ip_address(proxy.hostname)
+    for address in addresses:
+        _public_address(address)
+        family = socket.AF_INET6 if proxy_address.version == 6 else socket.AF_INET
+        connection = socket.socket(family, socket.SOCK_STREAM, socket.IPPROTO_TCP)
+        try:
+            connection.settimeout(_remaining(deadline, policy.connect_timeout_seconds))
+            endpoint = (str(proxy_address), proxy.port, 0, 0) if family == socket.AF_INET6 else (str(proxy_address), proxy.port)
+            connection.connect(endpoint)
+            if ipaddress.ip_address(connection.getpeername()[0]) != proxy_address:
+                raise ResearchFetchError("peer_mismatch")
+            authority = f"[{address}]:443" if ":" in address else f"{address}:443"
+            request = (f"CONNECT {authority} HTTP/1.1\r\nHost: {authority}\r\n\r\n").encode("ascii")
+            connection.sendall(request)
+            with connection.makefile("rb") as stream:
+                reader = _Reader(stream, policy)
+                line = reader.line()
+                if not re.fullmatch(rb"HTTP/1\.[01] 200(?: [\x20-\x7e]*)?", line):
+                    raise ResearchFetchError("proxy_connect_failed")
+                reader.headers()
+            connection.settimeout(_remaining(deadline))
+            context = ssl.create_default_context()
+            context.minimum_version = ssl.TLSVersion.TLSv1_2
+            connection = context.wrap_socket(connection, server_hostname=target.hostname)
+            connection.settimeout(_remaining(deadline))
+            return connection, address
+        except ssl.SSLCertVerificationError:
+            connection.close()
+            raise ResearchFetchError("tls_verification_failed") from None
+        except ResearchFetchError:
+            connection.close()
+            raise
+        except (OSError, ssl.SSLError):
+            connection.close()
+    raise ResearchFetchError("proxy_connect_failed")
+
+
 class _Reader:
     def __init__(self, stream, policy: FetchPolicy):
         self.stream = stream
@@ -343,14 +423,46 @@ class _Reader:
         return body
 
 
-def _fetch_direct(url: str, method: str, policy: FetchPolicy) -> FetchResult:
+def _request_payload(method, policy, json_body, headers):
+    if method not in ("GET", "HEAD", "POST") or (method == "POST" and not policy.allow_json_post):
+        raise ResearchFetchError("method_denied")
+    if method != "POST" and json_body is not None:
+        raise ResearchFetchError("method_denied")
+    try:
+        if method == "POST" and not isinstance(json_body, (dict, list)):
+            raise ValueError
+        body = json.dumps(json_body, ensure_ascii=True, allow_nan=False, separators=(",", ":")).encode("ascii") if method == "POST" else b""
+        if headers is None:
+            headers = {}
+        if not isinstance(headers, dict) or len(headers) > 24:
+            raise ValueError
+        selected = {}
+        denied = {"authorization", "cookie", "host", "content-length", "transfer-encoding", "connection", "upgrade", "accept-encoding", "expect"}
+        for key, value in headers.items():
+            if (not isinstance(key, str) or not isinstance(value, str) or
+                    not _HEADER_NAME.fullmatch(key.encode("ascii")) or key.lower() in denied or
+                    key.lower().startswith(("proxy-", "sec-")) or
+                    any(ord(c) < 32 or ord(c) > 126 for c in value) or key.lower() in selected):
+                raise ValueError
+            selected[key.lower()] = value
+        if method == "POST":
+            if selected.get("content-type", "application/json") != "application/json":
+                raise ValueError
+            selected["content-type"] = "application/json"
+        if len(body) + sum(len(k) + len(v) + 4 for k, v in selected.items()) > policy.max_request_bytes:
+            raise ResearchFetchError("request_too_large")
+        return body, selected
+    except (ValueError, TypeError, UnicodeError, RecursionError):
+        raise ResearchFetchError("invalid_request") from None
+
+
+def _fetch_direct(url: str, method: str, policy: FetchPolicy, json_body=None, headers=None) -> FetchResult:
     """Trusted worker implementation; callers use PublicResearchFetcher.fetch."""
-    audit = {"method": method if method in ("GET", "HEAD") else "denied",
+    audit = {"method": method if method in ("GET", "HEAD", "POST") else "denied",
              "hops": [], "body_bytes": 0}
     reader = None
     try:
-        if method not in ("GET", "HEAD"):
-            raise ResearchFetchError("method_denied")
+        body_bytes, request_headers = _request_payload(method, policy, json_body, headers)
         target = _target(url, policy)
         deadline = time.monotonic() + policy.timeout_seconds
         seen = set()
@@ -360,16 +472,20 @@ def _fetch_direct(url: str, method: str, policy: FetchPolicy) -> FetchResult:
             seen.add(target.url)
             entry = {"origin": target.origin,
                      "url_sha256": hashlib.sha256(target.url.encode()).hexdigest(),
-                     "resolved_addresses": []}
+                     "resolved_addresses": [], "route": "proxy" if uses_proxy(target.hostname, policy) else "direct",
+                     "method": method}
             audit["hops"].append(entry)
-            request = (f"{method} {target.path} HTTP/1.1\r\nHost: {target.authority}\r\n"
-                       "User-Agent: ResearchOps-PublicFetch/1\r\nAccept: */*\r\n"
-                       "Accept-Encoding: identity\r\nConnection: close\r\n\r\n").encode("ascii")
+            outgoing = {"user-agent": "ResearchOps-PublicFetch/1", "accept": "*/*", **request_headers}
+            request = (f"{method} {target.path} HTTP/1.1\r\nHost: {target.authority}\r\n" +
+                       "".join(f"{key}: {value}\r\n" for key, value in outgoing.items()) +
+                       (f"Content-Length: {len(body_bytes)}\r\n" if method == "POST" else "") +
+                       "Accept-Encoding: identity\r\nConnection: close\r\n\r\n").encode("ascii") + body_bytes
             if len(request) > policy.max_request_bytes:
                 raise ResearchFetchError("request_too_large")
             addresses = _resolve(target)
             entry["resolved_addresses"] = list(addresses)
-            connection, address = _connect(target, addresses, policy, deadline)
+            connector = _connect_proxy if uses_proxy(target.hostname, policy) else _connect
+            connection, address = connector(target, addresses, policy, deadline)
             entry["connected_address"] = address
             with connection:
                 connection.sendall(request)
@@ -393,6 +509,14 @@ def _fetch_direct(url: str, method: str, policy: FetchPolicy) -> FetchResult:
                         next_target = _target(urljoin(target.url, locations[0]), policy)
                         if target.scheme == "https" and next_target.scheme != "https":
                             raise ResearchFetchError("https_downgrade_denied")
+                        if method == "POST":
+                            if status in (301, 302, 303):
+                                method, body_bytes = "GET", b""
+                                request_headers.pop("content-type", None)
+                            elif next_target.origin != target.origin:
+                                raise ResearchFetchError("redirect_denied")
+                        if next_target.origin != target.origin:
+                            request_headers = {}
                         target = next_target
                         continue
                     if headers.get("content-encoding", ["identity"]) != ["identity"]:
@@ -429,11 +553,12 @@ class PublicResearchFetcher:
         if not isinstance(self.policy, FetchPolicy):
             raise ValueError("policy must be FetchPolicy")
 
-    def fetch(self, url: str, *, method: str = "GET", cancellation_check=None) -> FetchResult:
-        if method not in ("GET", "HEAD"):
-            raise ResearchFetchError("method_denied")
+    def fetch(self, url: str, *, method: str = "GET", cancellation_check=None,
+              json_body=None, headers=None) -> FetchResult:
+        _request_payload(method, self.policy, json_body, headers)
         _target(url, self.policy)  # Reject invalid requests before any subprocess.
-        request = json.dumps({"url": url, "method": method, "policy": asdict(self.policy)},
+        request = json.dumps({"url": url, "method": method, "policy": asdict(self.policy),
+                             "json_body": json_body, "headers": headers}, allow_nan=False,
                              ensure_ascii=True).encode("ascii")
         if len(request) > _WORKER_INPUT_LIMIT:
             raise ResearchFetchError("request_too_large")
@@ -504,7 +629,8 @@ def _worker_main() -> int:
         if len(raw) > _WORKER_INPUT_LIMIT:
             raise ResearchFetchError("request_too_large")
         request = json.loads(raw)
-        result = _fetch_direct(request["url"], request["method"], FetchPolicy(**request["policy"]))
+        result = _fetch_direct(request["url"], request["method"], FetchPolicy(**request["policy"]),
+                               request.get("json_body"), request.get("headers"))
         response = result.to_dict(include_body=True)
     except ResearchFetchError as exc:
         response = {"error": exc.code, "audit": exc.audit}

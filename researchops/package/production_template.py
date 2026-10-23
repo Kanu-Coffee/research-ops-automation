@@ -21,7 +21,8 @@ def build_production_package(*, task_id: str, name: str, instructions: str,
                              sender_profile_id: str = "default",
                              recipient_routing_mode: str = "legacy_ids",
                              stage_settings: Optional[dict] = None,
-                             recipient_visibility: str = "to") -> Dict[str, str]:
+                             recipient_visibility: str = "to",
+                             allow_http_requests: bool = False) -> Dict[str, str]:
     if not isinstance(name, str) or not name.strip() or len(name) > 200:
         raise ValidationError("Task name must contain 1–200 characters")
     if not isinstance(instructions, str) or not instructions.strip() or len(instructions) > 100_000:
@@ -37,12 +38,17 @@ def build_production_package(*, task_id: str, name: str, instructions: str,
         raise ValidationError("Unknown recipient visibility")
     if type(schedule_enabled) is not bool:
         raise ValidationError("Schedule enablement must be a boolean")
+    if type(allow_http_requests) is not bool:
+        raise ValidationError("Worker HTTP access must be a boolean")
+    if allow_http_requests and runner_type not in {"codex_exec", "antigravity_exec"}:
+        raise ValidationError("Worker HTTP access requires a native production runner")
     if model is not None and (not isinstance(model, str) or len(model) > 200 or
                               any(c in model for c in "\r\n\x00")):
         raise ValidationError("Invalid runner model")
     runner = {"type": runner_type, "session_mode": "fresh", "timeout_seconds": 7200,
               "max_attempts": 2, "concurrency": 1, "sandbox": "task-workspace",
               "network_profile": "public-research", "resource_profile": "standard-research",
+              "allow_http_requests": allow_http_requests,
               "model": model or None, "reasoning_effort": None}
     if stage_settings is not None:
         if not isinstance(stage_settings, dict) or set(stage_settings) != {"research", "compose"}:

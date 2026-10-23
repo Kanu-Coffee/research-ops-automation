@@ -16,6 +16,8 @@ class RunnerInvocationContext:
     reasoning_effort: Optional[str] = None
     timeout_seconds: int = 7200
     network_profile: str = "none"
+    allow_http_requests: bool = False
+    http_proxy_profile: Dict[str, Any] = field(default_factory=dict)
     resource_profile: str = "standard-research"
     fencing_token: Optional[str] = None
     cancellation_check: Optional[Callable[[], bool]] = field(default=None, repr=False)

@@ -6,6 +6,43 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from researchops.domain.models import TaskDefinition
 from researchops.storage.repositories import StateRepository
+from researchops.errors import ValidationError
+
+
+def validate_entity_aliases(config):
+    """Validate explicit, operator-authored complete-key equivalence groups."""
+    groups = config.get("entity_aliases", [])
+    keys = config.get("key_fields", [])
+    if not isinstance(groups, list) or len(groups) > 128:
+        raise ValidationError("dedupe.entity_aliases must contain at most 128 groups")
+    seen = set()
+    for group in groups:
+        if not isinstance(group, dict) or set(group) != {"identities", "evidence"}:
+            raise ValidationError("Each dedupe alias group requires identities and evidence")
+        identities = group["identities"]
+        if not isinstance(group["evidence"], str) or not group["evidence"].strip() or len(group["evidence"]) > 2048:
+            raise ValidationError("Dedupe identity aliases require bounded evidence")
+        if not isinstance(identities, list) or not 2 <= len(identities) <= 8 or not keys:
+            raise ValidationError("Dedupe alias groups require 2-8 complete identities")
+        for identity in identities:
+            if not isinstance(identity, dict) or set(identity) != set(keys) or any(
+                not isinstance(v, str) or not v.strip() or len(v) > 256 for v in identity.values()
+            ):
+                raise ValidationError("Dedupe aliases must specify every key field as a nonempty string")
+            key = derive_entity_key(identity, keys)
+            if key in seen:
+                raise ValidationError("Dedupe alias identities must not repeat or overlap groups")
+            seen.add(key)
+
+
+def equivalent_records(record, config):
+    """Expand only declared exact identities; never infer equivalence from names."""
+    key = derive_entity_key(record, config["key_fields"])
+    for group in config.get("entity_aliases", []):
+        if any(derive_entity_key(identity, config["key_fields"]) == key for identity in group["identities"]):
+            # Preserve all non-identity content, including changed benefits.
+            return [dict(record, **identity) for identity in group["identities"]]
+    return [record]
 
 
 def derive_entity_key(record: Dict[str, Any], key_fields: List[str]) -> Optional[str]:
@@ -60,6 +97,8 @@ class ContentDeduplicator:
             # Misconfigured dedupe config
             return list(records), [], ["Dedupe enabled but missing key_fields or content_fields; skipped dedupe."]
 
+        validate_entity_aliases(dedupe_conf)
+
         reportable: List[Dict[str, Any]] = []
         excluded: List[Dict[str, Any]] = []
         warnings: List[str] = []
@@ -83,14 +122,20 @@ class ContentDeduplicator:
             rec_copy["_entity_key"] = entity_key
             rec_copy["_content_fingerprint"] = fingerprint
 
-            is_exact_match = self.state_repo.is_reported_item_unchanged(
-                task_id=task_def.id,
-                entity_key=entity_key,
-                content_fingerprint=fingerprint
-            )
+            # Lookup both old and new identifiers without rewriting sent history.
+            # The key and fingerprint must match the SAME equivalent record.
+            matched = next((candidate for candidate in equivalent_records(rec, dedupe_conf)
+                if self.state_repo.is_reported_item_unchanged(
+                    task_id=task_def.id,
+                    entity_key=derive_entity_key(candidate, key_fields),
+                    content_fingerprint=derive_content_fingerprint(candidate, content_fields))), None)
+            is_exact_match = matched is not None
 
             if is_exact_match:
                 rec_copy["_dedupe_status"] = "already_reported_exact"
+                if derive_entity_key(matched, key_fields) != entity_key:
+                    rec_copy["_matched_entity_key"] = derive_entity_key(matched, key_fields)
+                    rec_copy["_dedupe_match_basis"] = "configured_identity_alias"
                 excluded.append(rec_copy)
             else:
                 reportable.append(dict(rec))

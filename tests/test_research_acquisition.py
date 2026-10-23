@@ -492,6 +492,24 @@ class ResearchAcquisitionTests(unittest.TestCase):
         self.assertEqual(receipt["source"]["url"], "https://www.shinhancard.com/plate.png")
         self.assertNotIn("hidden", json.dumps(self.session.ledger()))
 
+    def test_official_image_acquisition_preserves_selected_proxy_policy(self):
+        self.session.close()
+        profile = {"name":"test", "proxy_url":"http://127.0.0.1:18888", "host_patterns":["*.shinhancard.com"]}
+        self.session = ResearchAcquisitionSession(self.settings, run_id="run-synthetic",task_id="task-synthetic",
+            attempt=1,fencing_token="fence-synthetic",storage_root=self.root/'app-proxy',http_proxy_profile=profile)
+        policies = []
+        raw = png_bytes()
+        def image(client, url, **kwargs):
+            policies.append(client.policy)
+            return FetchResult(200,url,{"content-type":"image/png"},raw,{"body_bytes":len(raw)})
+        with patch('researchops.engine.research_acquisition.PublicResearchFetcher.fetch',image):
+            self.start()
+            result = self.acquire({"kind":"official_image","url":"https://www.shinhancard.com/plate.png"})
+        self.assertEqual(result['status'],'available')
+        self.assertEqual(policies[0].proxy_url,profile['proxy_url'])
+        self.assertEqual(policies[0].proxy_host_patterns,tuple(profile['host_patterns']))
+
+
 
 if __name__ == "__main__":
     unittest.main()

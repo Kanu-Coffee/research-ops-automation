@@ -457,6 +457,106 @@ class ProductionRunnerTests(unittest.TestCase):
         self.assertFalse(result.success)
         self.assertEqual((self.output / "email.html").read_text(), "existing")
 
+    def test_http_option_enables_codex_shell_network_only_for_research(self):
+        (self.input / "composition-input.json").write_text("{}")
+        for stage, network, allow, expected in (
+                ("research", "public-research", True, True),
+                ("research", "public-research", False, False),
+                ("research", "none", True, False),
+                ("compose", "public-research", True, False)):
+            with self.subTest(stage=stage, network=network, allow=allow):
+                context = self.context(stage, network)
+                context.allow_http_requests = allow
+                prompt = _prompt(self.input, self.project, self.tmp, context)
+                control = self.root / f"http-control-{stage}-{network}-{allow}"
+                control.mkdir()
+                argv, _ = build_production_command("codex_exec", "/usr/bin/codex", prompt,
+                    self.project, self.tmp, control, context)
+                self.assertIn("sandbox_workspace_write.network_access="
+                              + ("true" if expected else "false"), argv)
+                if stage == "research" and network == "public-research":
+                    self.assertIn('"allow_http_requests": ' + ("true" if allow else "false"), prompt)
+                    self.assertIn("Shell HTTP access is enabled" if allow
+                                  else "Shell HTTP and direct network requests are disabled", prompt)
+                else:
+                    self.assertIn("Do not use web search, URL fetching, network requests", prompt)
+        research = self.context("research", "public-research")
+        research.allow_http_requests = True
+        self.assertIn("Never use shell HTTP to obtain protected CardRAG PDFs",
+                      _prompt(self.input, self.project, self.tmp, research))
+
+
+    def test_http_option_gate_reaches_runner_info_for_both_providers(self):
+        compose_document = {"composition_result": {"html_path": "email.html",
+            "text_path": "email.txt", "subject": "Synthetic", "recipient_group_id": "team"},
+            "html": "<p>Synthetic</p>", "text": "Synthetic"}
+        cases = (
+            ("research", "public-research", True, True),
+            ("research", "public-research", False, False),
+            ("research", "none", True, False),
+            ("compose", "public-research", True, False),
+        )
+        for runner_class, provider in ((CodexRunner, "codex_exec"),
+                                       (AntigravityRunner, "antigravity_exec")):
+            for index, (stage, network, allow, expected) in enumerate(cases):
+                with self.subTest(provider=provider, stage=stage, network=network, allow=allow):
+                    root = Path(tempfile.mkdtemp(prefix="http-gate-", dir=self.root))
+                    input_dir, tmp_dir, output_dir, project_dir = [
+                        root / name for name in ("input", "tmp", "output", "project")]
+                    for path in (input_dir, tmp_dir, output_dir, project_dir):
+                        path.mkdir()
+                    (input_dir / "task.md").write_text("Synthetic task instructions.")
+                    if stage == "compose":
+                        (input_dir / "composition-input.json").write_text("{}")
+                    context = RunnerInvocationContext("operator-task", f"run-{index}", 1, stage,
+                        timeout_seconds=600, network_profile=network, local_date="2026-10-20")
+                    context.allow_http_requests = allow
+                    document = ({"status": "success", "records": [], "artifacts": []}
+                                if stage == "research" else compose_document)
+                    with patch("shutil.which", return_value="/usr/bin/native"), patch(
+                            "researchops.runners.production.run_bounded",
+                            return_value=response(provider, document)) as bounded:
+                        result = runner_class().execute_research(
+                            input_dir, tmp_dir, output_dir, project_dir, context) if stage == "research" \
+                            else runner_class().execute_compose(
+                                input_dir, tmp_dir, output_dir, project_dir, context)
+                    self.assertTrue(result.success, result.error_message)
+                    self.assertIs(result.isolation["allow_http_requests"], expected)
+                    self.assertIs(result.isolation["requested_shell_network_access"], expected)
+                    prompt = _prompt(input_dir, project_dir, tmp_dir, context)
+                    if stage == "research":
+                        self.assertIn('"allow_http_requests": ' + str(expected).lower(), prompt)
+                    else:
+                        self.assertNotIn('"allow_http_requests"', prompt)
+
+
+    def test_public_http_helper_is_staged_only_for_http_research(self):
+        profile = {"name":"test", "proxy_url":"http://127.0.0.1:18888", "host_patterns":["*.example.org"]}
+        context = self.context()
+        context.allow_http_requests = True
+        context.http_proxy_profile = profile
+        def process(*args, **kwargs):
+            prompt = kwargs['stdin'].decode()
+            self.assertIn('from researchops.runners.public_http', prompt)
+            self.assertIn('*.example.org', prompt)
+            work = next(self.tmp.glob('production-work-*'))
+            helper = work/'.researchops-submit/researchops/runners'
+            self.assertTrue((helper/'public_http.py').is_file())
+            self.assertTrue((helper/'research_fetch.py').is_file())
+            self.assertEqual(json.loads((helper/'http-profile.json').read_text()),profile)
+            import subprocess
+            command = ['python3','-I','-c',
+                'import sys;sys.path.insert(0,sys.argv[1]);from researchops.runners.public_http import fetch_public;print(callable(fetch_public))',
+                str(work/'.researchops-submit')]
+            self.assertEqual(subprocess.check_output(command).strip(), b'True')
+            return response('codex_exec',{'status':'success','records':[],'artifacts':[]})
+        with patch('shutil.which',return_value='/usr/bin/codex'), patch(
+                'researchops.runners.production.run_bounded',side_effect=process):
+            result = self.execute(CodexRunner(),context)
+        self.assertTrue(result.success,result.error_message)
+        self.assertEqual(result.isolation['http_proxy_profile']['name'],'test')
+
+
 
 class ProductionCleanupLifecycleTests(unittest.TestCase):
     def test_complete_provider_error_releases_claim_but_missing_terminal_keeps_lock(self):

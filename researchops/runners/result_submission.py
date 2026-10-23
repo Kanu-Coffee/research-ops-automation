@@ -186,7 +186,7 @@ def submit_result(document, stage, directory):
     return encoded
 
 
-def stage_submission_helper(work_dir):
+def stage_submission_helper(work_dir, *, include_imagegen=False):
     """Place the standard-library helper in the authorized invocation workspace."""
     work_dir = Path(work_dir)
     helper = work_dir / HELPER_DIRECTORY
@@ -200,5 +200,7 @@ def stage_submission_helper(work_dir):
                         (source / "response_transport.py", runners / "response_transport.py"),
                         (source / "result_submission.py", runners / "result_submission.py")):
         target.write_bytes(src.read_bytes())
+    if include_imagegen:
+        (runners / 'image_generation.py').write_bytes((source / 'image_generation.py').read_bytes())
     (work_dir / SUBMISSION_DIRECTORY).mkdir(mode=0o700)
     return helper

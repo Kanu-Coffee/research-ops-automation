@@ -87,3 +87,14 @@ Task의 지시만 바꾼 일반 문서 도표와 상품 그림 사례는 같은 
 `python -m tests.live_research_file_validation --live --provider ... --root ...`는 명시적
 합성 native 검증이다. 기존 CardRAG 서버·업무 자료·실제 SMTP를 사용하지 않는다.
 공개 릴리스의 검증 범위는 [STATUS](STATUS.md)와 해당 CI/Release 기록에서 확인한다.
+
+선택적 Research HTTP 조회와 proxy 설정은 [공개 HTTP 라우팅](HTTP_PROXY_ROUTING.md)을 따른다.
+
+## Research 이미지 생성 helper
+
+공개 Research에 제공되는 `researchops.runners.image_generation.generate_images`는
+PNG/JPG 파일명과 prompt로 구성된 brief 1~4개를 받아 설치된 Codex CLI의 native imagegen을
+사용한다. 기존 CLI 로그인을 정상 사용하고 인증파일을 읽거나 복사하지 않는다. 저장된
+Research/Compose 모델은 변경하지 않는다. timeout·파일 형식·크기·hash 검증을 거치며
+실패 시 다른 공급자로 자동 전환하지 않는다. 생성 결과도 기존 artifact 경로와 무결성
+검사를 통과해야 한다. 기본 회귀에서는 CLI double만 사용한다.

@@ -102,6 +102,18 @@ class TaskEditorFlowTests(unittest.TestCase):
         self.assertIn('<input type="checkbox" name="recipient_visibility" value="bcc" checked>', body_bcc)
         self.assertIn("숨은참조(BCC)", body_bcc)
 
+    def test_http_option_checkbox_renders_only_when_enabled(self):
+        default_body = self.render()
+        default = OperatorForms(default_body).find("/tasks/production/create")
+        self.assertNotIn("allow_http_requests", default)
+        self.assertIn('<input type="checkbox" name="allow_http_requests" value="true"', default_body)
+        enabled_body = self.render({"name": "HTTP Task", "allow_http_requests": True})
+        enabled = OperatorForms(enabled_body).find("/tasks/production/create")
+        self.assertEqual(enabled["allow_http_requests"], "true")
+        self.assertIn('<input type="checkbox" name="allow_http_requests" value="true" checked>',
+                      enabled_body)
+
+
 
 if __name__ == "__main__":
     unittest.main()

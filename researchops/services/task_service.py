@@ -290,6 +290,11 @@ class TaskService:
         )
 
     def _validate_recipient_groups(self, definition: TaskDefinition) -> None:
+        from researchops.runners.http_routing import resolve_http_profile
+        try:
+            resolve_http_profile(self.settings, definition.runner)
+        except ValueError as exc:
+            raise ValidationError(str(exc)) from None
         from researchops.delivery.smtp_config import load_delivery_config
         config = load_delivery_config(self.settings.paths.delivery_config_file)
         self.catalog.bootstrap_delivery(config)
@@ -321,7 +326,8 @@ class TaskService:
                                source_version_hash: Optional[str] = None,
                                recipient_routing_mode: Optional[str] = None,
                                stage_settings: Optional[dict] = None,
-                               recipient_visibility: str = "to") -> TaskVersion:
+                               recipient_visibility: str = "to",
+                               allow_http_requests: Optional[bool] = None) -> TaskVersion:
         """Publish operator instructions directly for real execution and delivery.
 
         Repeating the exact task ID/package is idempotent; a conflicting existing
@@ -332,10 +338,13 @@ class TaskService:
             raise ValidationError("Direct production publication requires the production environment")
         if request_key is not None and (not isinstance(request_key, str) or not 1 <= len(request_key) <= 128):
             raise ValidationError("request_key must contain 1-128 characters")
+        if allow_http_requests is not None and type(allow_http_requests) is not bool:
+            raise ValidationError("Worker HTTP access must be a boolean")
         if task_id is None or task_id == "":
             task_id = self.catalog.allocate("task", name, request_key=request_key)["legacy_key"]
         self._validate_task_id(task_id)
         self._require_not_deleted(task_id)
+        new_task_http = False if allow_http_requests is None else allow_http_requests
         from researchops.package.production_template import build_production_package
         files = build_production_package(task_id=task_id, name=name, instructions=instructions,
             runner_type=runner_type, recipient_group_id=recipient_group_id, cron=cron,
@@ -343,7 +352,7 @@ class TaskService:
             email_spec_md=email_spec_md, sender_profile_id=sender_profile_id,
             recipient_routing_mode=recipient_routing_mode or ("legacy_ids" if recipient_group_id else "catalog_name"),
             stage_settings=self._normalize_stage_settings(stage_settings) if not source_task_id else None,
-            recipient_visibility=recipient_visibility)
+            recipient_visibility=recipient_visibility, allow_http_requests=new_task_http)
         if source_task_id:
             self._require_not_deleted(source_task_id)
             source = self.task_repo.get_active_version(source_task_id)
@@ -359,7 +368,7 @@ class TaskService:
                 recipient_group_id=recipient_group_id, sender_profile_id=sender_profile_id,
                 cron=cron, schedule_enabled=schedule_enabled, model=model,
                 recipient_routing_mode=recipient_routing_mode, stage_settings=stage_settings,
-                recipient_visibility=recipient_visibility)
+                recipient_visibility=recipient_visibility, allow_http_requests=allow_http_requests)
         definition_dict = yaml.safe_load(files["task.yaml"])
         self.loader.validate_package(definition_dict, files)
         definition = TaskDefinition(**definition_dict)
@@ -394,6 +403,7 @@ class TaskService:
             "instructions": version.package_files["task.md"],
             "email_spec_md": version.package_files.get("email_spec.md", ""),
             "runner_type": task.runner["type"], "model": task.runner.get("model") or "",
+            "allow_http_requests": task.runner.get("allow_http_requests") is True,
             "stage_settings": resolve_task_stages(task),
             "cron": (task.schedule or {}).get("cron", "0 9 * * *"),
             "enabled": bool(status["enabled"]), "schedule_enabled": bool(status["enabled"]),
@@ -412,7 +422,8 @@ class TaskService:
                       schedule_enabled: bool, model: Optional[str],
                       recipient_routing_mode: Optional[str] = None,
                       stage_settings: Optional[dict] = None,
-                      recipient_visibility: str = "to") -> Dict[str, str]:
+                      recipient_visibility: str = "to",
+                      allow_http_requests: Optional[bool] = None) -> Dict[str, str]:
         # Reuse input validation only, never the generated package/body template.
         from researchops.package.production_template import build_production_package
         old_mode = source.definition.delivery.get("recipient_routing_mode", "legacy_ids")
@@ -427,6 +438,12 @@ class TaskService:
         config.setdefault("schedule", {}).update(cron=cron, timezone="Asia/Seoul")
         config["schedule"].setdefault("misfire_policy", "enqueue_once")
         config["runner"].update(type=runner_type, model=model or None)
+        if allow_http_requests is not None:
+            if type(allow_http_requests) is not bool:
+                raise ValidationError("Worker HTTP access must be a boolean")
+            if allow_http_requests and config["runner"].get("network_profile") != "public-research":
+                raise ValidationError("Worker HTTP access requires network_profile=public-research")
+            config["runner"]["allow_http_requests"] = allow_http_requests
         stages = self._normalize_stage_settings(stage_settings, source)
         if stages is not None:
             config["runner"]["stages"] = stages
@@ -496,7 +513,8 @@ class TaskService:
                                expected_updated_at: Optional[str] = None,
                                recipient_routing_mode: Optional[str] = None,
                                stage_settings: Optional[dict] = None,
-                               recipient_visibility: str = "to") -> TaskVersion:
+                               recipient_visibility: str = "to",
+                               allow_http_requests: Optional[bool] = None) -> TaskVersion:
         """Save a real task in place, retaining its identity and immutable history."""
         if self.settings.environment != "production":
             raise ValidationError("Direct task editing requires the production environment")
@@ -513,7 +531,7 @@ class TaskService:
             recipient_group_id=recipient_group_id, sender_profile_id=sender_profile_id,
             cron=cron, schedule_enabled=schedule_enabled, model=model,
             recipient_routing_mode=recipient_routing_mode, stage_settings=stage_settings,
-            recipient_visibility=recipient_visibility)
+            recipient_visibility=recipient_visibility, allow_http_requests=allow_http_requests)
         config = yaml.safe_load(files["task.yaml"])
         self.loader.validate_package(config, files)
         definition = TaskDefinition(**config)
