@@ -209,8 +209,10 @@ def _existing_files(prepared, root, media, result, cancellation_check, *, reserv
 
 
 class ArtifactAcquirer:
-    def __init__(self, settings):
+    def __init__(self, settings, *, http_proxy_profile=None):
         self.settings = settings
+        from researchops.runners.http_routing import policy_options
+        self.http_proxy_options = policy_options(http_proxy_profile)
         self.last_report = None
         self.last_file_paths: dict[str, Path] = {}
         self.pdf_fetcher = CardRAGPDFFetcher()
@@ -450,7 +452,7 @@ class ArtifactAcquirer:
                             raise ResearchFetchError("host_denied")
                         policy = FetchPolicy(max_body_bytes=min(budget, media.max_image_bytes),
                             timeout_seconds=min(remaining, media.file_timeout_seconds), require_https=True,
-                            allowed_hosts=media.official_image_hosts)
+                            allowed_hosts=media.official_image_hosts, **self.http_proxy_options)
                         reserved_bytes = policy.max_body_bytes
                         fetched = PublicResearchFetcher(policy).fetch(artifact["source"]["url"], cancellation_check=cancellation_check)
                     raw = fetched.body

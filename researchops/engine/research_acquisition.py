@@ -40,11 +40,13 @@ def _bytes(value):
 
 class ResearchAcquisitionSession:
     def __init__(self, settings, *, run_id, task_id, attempt, fencing_token, storage_root,
-                 cancellation_check=None):
+                 cancellation_check=None, http_proxy_profile=None):
         if (any(not isinstance(value, str) or not value or len(value) > 160
                 for value in (run_id, task_id, fencing_token)) or type(attempt) is not int or attempt < 1):
             raise HardGateError("Invalid research acquisition identity")
         self.settings = settings
+        from researchops.runners.http_routing import policy_options
+        self.http_proxy_options = policy_options(http_proxy_profile)
         self.run_id, self.task_id, self.attempt = run_id, task_id, attempt
         self.fencing_token = fencing_token
         self.storage_root = Path(os.path.abspath(storage_root))
@@ -263,7 +265,8 @@ class ResearchAcquisitionSession:
                 if not media.official_image_hosts:
                     raise ResearchFetchError("host_denied")
                 policy = FetchPolicy(max_body_bytes=min(budget, media.max_image_bytes),
-                    timeout_seconds=timeout, require_https=True, allowed_hosts=media.official_image_hosts)
+                    timeout_seconds=timeout, require_https=True, allowed_hosts=media.official_image_hosts,
+                    **self.http_proxy_options)
                 reserved_bytes = policy.max_body_bytes
                 active_started = time.monotonic()
                 fetched = PublicResearchFetcher(policy).fetch(raw_source["url"], cancellation_check=self._cancelled)

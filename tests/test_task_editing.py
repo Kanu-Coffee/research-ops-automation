@@ -287,6 +287,60 @@ class TestTaskEditing(unittest.TestCase):
         with self.assertRaises(ValidationError):
             self.edit(email_spec_md="")
 
+    def test_http_option_round_trips_preserves_when_omitted_and_requires_public_research(self):
+        version = self.create(allow_http_requests=True)
+        self.assertTrue(version.definition.runner["allow_http_requests"])
+        self.assertTrue(self.app.tasks.get_task_editor(version.task_id)["allow_http_requests"])
+        preserved = self.edit(instructions="# 수정\n기존 HTTP 설정을 유지한다.\n")
+        self.assertTrue(preserved.definition.runner["allow_http_requests"])
+        disabled = self.edit(form=self.app.tasks.get_task_editor(version.task_id),
+                             allow_http_requests=False)
+        self.assertFalse(disabled.definition.runner["allow_http_requests"])
+        files = dict(self.create(task_id="http-invalid").package_files)
+        config = yaml.safe_load(files["task.yaml"])
+        config["runner"]["network_profile"] = "none"
+        config["runner"]["allow_http_requests"] = True
+        files["task.yaml"] = yaml.safe_dump(config, sort_keys=False, allow_unicode=True)
+        with self.assertRaises(ValidationError) as raised:
+            self.app.tasks.loader.validate_package(config, files)
+        self.assertTrue(any("public-research" in error for error in raised.exception.errors),
+                        raised.exception.errors)
+
+
+    def test_clone_http_option_omitted_preserves_source_and_false_disables(self):
+        source = self.create(task_id="http-source", allow_http_requests=True)
+        inherited = self.create(task_id="http-clone-inherit",
+            source_task_id=source.task_id, source_version_hash=source.version_hash)
+        self.assertTrue(inherited.definition.runner["allow_http_requests"])
+        disabled = self.create(task_id="http-clone-off",
+            source_task_id=source.task_id, source_version_hash=source.version_hash,
+            allow_http_requests=False)
+        self.assertFalse(disabled.definition.runner["allow_http_requests"])
+        fresh = self.create(task_id="http-fresh")
+        self.assertFalse(fresh.definition.runner["allow_http_requests"])
+        for value in ("false", 1):
+            with self.subTest(invalid=value), self.assertRaisesRegex(ValidationError, "boolean"):
+                self.create(task_id=f"http-invalid-type-{type(value).__name__}",
+                            allow_http_requests=value)
+
+        legacy_source = self.create(task_id="http-legacy", allow_http_requests=True)
+        files = dict(legacy_source.package_files)
+        config = yaml.safe_load(files["task.yaml"])
+        config["runner"].pop("allow_http_requests")
+        files["task.yaml"] = yaml.safe_dump(config, sort_keys=False, allow_unicode=True)
+        self.app.tasks.loader.validate_package(config, files)
+        legacy = TaskVersion(task_id=legacy_source.task_id,
+            version_hash=compute_package_hash({name: text.encode() for name, text in files.items()}),
+            sealed_at=datetime.now(timezone.utc).isoformat(), definition=TaskDefinition(**config),
+            package_files=files)
+        publish_version(self.settings.paths.task_versions_dir, legacy)
+        self.app.task_repo.save_version(legacy)
+        self.app.tasks.activate_version(legacy.task_id, legacy.version_hash)
+        legacy_clone = self.create(task_id="http-legacy-clone",
+            source_task_id=legacy.task_id, source_version_hash=legacy.version_hash)
+        self.assertFalse(legacy_clone.definition.runner.get("allow_http_requests", False))
+
+
 
 if __name__ == "__main__":
     unittest.main()

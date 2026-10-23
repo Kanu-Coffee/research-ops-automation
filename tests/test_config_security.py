@@ -110,6 +110,15 @@ class TestConfigSecurity(unittest.TestCase):
             with self.subTest(web=web), self.assertRaises(ConfigError):
                 self.load({"web": web})
 
+    def test_public_proxy_profiles_are_validated_without_affecting_defaults(self):
+        profile = {'proxy_url':'http://127.0.0.1:18888','host_patterns':['example.org','*.example.org']}
+        self.assertEqual(self.load({'http_proxy_profiles':{'test':profile}}).raw_config['http_proxy_profiles']['test'], profile)
+        for value in ([], {'bad':{}}, {'test':{**profile,'proxy_url':'http://user:secret@127.0.0.1:18888'}},
+                      {'test':{**profile,'host_patterns':['*example.org']}}):
+            with self.subTest(value=value), self.assertRaises(ConfigError):
+                self.load({'http_proxy_profiles':value})
+
+
 
 if __name__ == "__main__":
     unittest.main()

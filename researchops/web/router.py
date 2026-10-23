@@ -335,6 +335,7 @@ class WebRouter:
                 "schedule_weekday", "schedule_monthday", "schedule_minute", "launch_mode", "action")}
             values["task_md"] = get_field("task_md", get_field("instructions"))
             values["schedule_enabled"] = get_field("schedule_enabled") == "true"
+            values["allow_http_requests"] = get_field("allow_http_requests") == "true"
             values["sender_profile_id"] = values["sender_profile_id"] or "default"
             staged = posted_stage_settings()
             if staged is not None:
@@ -707,6 +708,7 @@ class WebRouter:
                             recipient_group_id=get_field("recipient_group_id").strip(),
                             recipient_routing_mode=get_field("recipient_routing_mode") or None,
                             recipient_visibility=visibility,
+                            allow_http_requests=values["allow_http_requests"],
                             sender_profile_id=get_field("sender_profile_id", "default"),
                             cron=cron_from_form(get_field), schedule_enabled=values["schedule_enabled"],
                             model=get_field("model").strip() or None,
@@ -742,6 +744,7 @@ class WebRouter:
                             recipient_group_id=get_field("recipient_group_id").strip(),
                             recipient_routing_mode=get_field("recipient_routing_mode") or None,
                             recipient_visibility=visibility,
+                            allow_http_requests=values["allow_http_requests"],
                             cron=cron_from_form(get_field),
                             schedule_enabled=scheduled,
                             model=get_field("model").strip() or None,

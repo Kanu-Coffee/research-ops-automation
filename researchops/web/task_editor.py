@@ -52,6 +52,7 @@ def task_editor_body(values: dict | None = None, *, mode: str = "create", recipi
     guard = (f'<input type="hidden" name="expected_version_hash" value="{_e(value.get("expected_version_hash", ""))}">'
              f'<input type="hidden" name="expected_updated_at" value="{_e(value.get("expected_updated_at", ""))}">') if editing else ""
     schedule_enabled = value.get("schedule_enabled", False) in (True, "true")
+    http_allowed = value.get("allow_http_requests", False) in (True, "true")
     launch_mode = value.get("launch_mode") or ("run" if value.get("action") == "create_and_run" else "save")
     multi_note = ('<p class="form-help">기존 복수 그룹 규칙 유지: '
                   + _e(", ".join(value.get("recipient_group_ids", []))) + '</p>') if len(value.get("recipient_group_ids", [])) > 1 else ""
@@ -119,6 +120,8 @@ def task_editor_body(values: dict | None = None, *, mode: str = "create", recipi
             <p class="form-help">{'비워 두면 기존 메일 규격을 유지합니다.' if editing or cloning else '비워 두면 기본 메일 규격을 사용합니다.'}</p></div>
         </section>
         <section id="editor-panel-execution" role="tabpanel" aria-labelledby="editor-tab-execution" data-editor-panel="execution" tabindex="-1">
+          <div class="form-group"><label class="editor-toggle"><input type="checkbox" name="allow_http_requests" value="true" {'checked' if http_allowed else ''}> Worker HTTP 조회 허용</label>
+            <p class="form-help">조사 중 공개 웹·JSON 조회와 파일 다운로드를 허용합니다. 외부 데이터 변경은 허용하지 않습니다.</p></div>
           {render_ai_controls(stage_settings(value), model_catalog)}
           <fieldset class="editor-schedule" id="schedule-editor"><legend>반복 일정 · 서울 시간</legend>{schedule_toggle}
             <div class="responsive-grid">

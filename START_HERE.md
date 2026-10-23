@@ -14,3 +14,5 @@
 공개 예제는 가상 소프트웨어인 Atlas Notes와 Cedar Board의 변경 공지를 정리합니다. 원래 운영환경의 조사 주제·Task 지시문·메일 규격을 재현하지 않습니다. 주소와 인증정보는 예제를 수정해 저장소에 넣지 말고 보호된 운영 설정에서 입력합니다.
 
 개발 검증은 독립 runtime을 사용합니다. 기존 DB를 여는 명령은 migration을 실행할 수 있으므로 테스트와 문서 검토에는 운영 설정을 연결하지 않습니다.
+
+선택적 Research HTTP 조회와 proxy 설정은 [공개 HTTP 라우팅](docs/HTTP_PROXY_ROUTING.md)을 따른다.

@@ -40,3 +40,20 @@ DB schema v3를 사용합니다. 오래된 schema는 앱 초기화 시 migration
 ## v1.0.1 변경
 
 SMTP 유휴 metadata 조회와 제한된 감사 파일 복구, Task별 BCC, Compose HTML 균형 검사, 활성 MCP schema 탐색과 단일 에이전트 감사 개선을 포함합니다. 실제 운영 설정·업무 지시문·내부 검토 기록은 공개하지 않습니다. 이번 릴리스의 검증 결과는 Release 첨부 `VALIDATION.json`과 CI 기록에서 확인합니다.
+
+## 2026-10-24 main 통합 검증
+
+공개 v1.0.1 기준에 최신 Research HTTP·선택적 CONNECT proxy·이미지 생성 helper·명시적
+식별자 별칭을 통합했다. 변경 내용은 [변경 이력](../CHANGELOG.md)과
+[HTTP 라우팅](HTTP_PROXY_ROUTING.md)을 따른다. 기존 릴리스의 가상 예제·익명화·패키지
+구성과 MCP permission fixture 수정을 유지하며 내부 운영 기록과 Task 원본은 포함하지 않는다.
+
+- Python 3.12.14 전체 회귀: 1,359건 중 1,353 통과, 조건부 6건 skip, 실패 0.
+- Compileall, git diff whitespace 검사, shellcheck와 actionlint 통과.
+- 앱 소스·테스트·문서 gitleaks 검사 통과.
+- 소스 목록·버전·문서 링크·SHA-256 검사와 wheel/sdist 빌드 통과.
+- 별도 환경에 설치한 wheel의 새 runner 모듈 import·의존성 검사와 fake pipeline 4종 통과.
+- Wheel/sdist에 내부 Task·authoring export·handoff 기록이 포함되지 않음을 확인.
+
+실제 모델·업무 실행·SMTP 발송과 운영 배포는 이번 Git 통합 검증에 포함하지 않는다.
+다른 Python 버전의 전체 회귀는 이 로컬 검증에서 실행하지 않았으며 기존 CI matrix를 유지한다.

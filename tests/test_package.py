@@ -114,6 +114,22 @@ class TestPackage(unittest.TestCase):
         with self.assertRaises(ValidationError):
             loader.load_from_dir(package)
 
+    def test_identity_aliases_are_validated_during_package_save(self):
+        files = template_package(self.settings, 'alias-task')
+        config = yaml.safe_load(files['task.yaml'])
+        config['state']['dedupe'] = {
+            'enabled': True, 'key_fields': ['issuer', 'product_code'],
+            'content_fields': ['issuer', 'product_code'],
+            'entity_aliases': [{'identities': [
+                {'issuer': 'a', 'product_code': 'catalog-id'},
+                {'issuer': 'a', 'product_code': 'type-id'}], 'evidence': 'Official linked codes'}]}
+        loader = TaskPackageLoader(self.settings.paths.schemas_dir)
+        loader.validate_package(config, files)
+        config['state']['dedupe']['entity_aliases'][0]['identities'][1].pop('issuer')
+        with self.assertRaises(ValidationError):
+            loader.validate_package(config, files)
+
+
 
 if __name__ == "__main__":
     unittest.main()
