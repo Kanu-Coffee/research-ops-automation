@@ -15,11 +15,20 @@ Codex는 읽기 전용 app-server model/list의 모델별 effort를 사용한다
 따라서 지원 여부가 확인되지 않은 --effort 조합을 만들지 않는다. Singleton은 기본값만
 표시하며 family에 기본 수준 근거가 없으면 사용자가 수준을 선택해야 한다.
 
+OpenCode는 공식 model.list projection의 `providerID + '/' + catalog id`와 실제 variant
+ID를 사용한다. catalog `id`는 선택 별칭이고 `modelID`는 upstream 이름이므로 선택
+key로 대체하지 않는다. model ID 내부의 `/`는 보존하고 첫 구분자만 provider로 해석한다. catalog에
+`default` variant가 명시되지 않았다면 `#default`를 만들지 않으며, variant가 없는 모델은
+기본 선택만 노출한다. settings/headers/endpoint는 picker metadata에 포함하지 않는다.
+자세한 실행·권한 경계는 [OpenCode runner](OPENCODE_RUNNER.md)를 따른다.
+
 캐시는 보호된 data/model-catalog에 저장한다. GET은 캐시만 읽고, CSRF를 통과한 명시적
-새로고침이 metadata CLI를 호출한다. 15분은 목록 freshness 기준이며 오래됨·조회 실패는
+새로고침이 metadata CLI/API를 호출한다. 15분은 목록 freshness 기준이며 오래됨·조회 실패는
 마지막 정상 목록과 기존 선택을 지우지 않는다. Codex app-server 조회 실패 시 CLI의
-models_cache.json에서 허용된 모델 metadata만 읽을 수 있다. 인증 파일을 읽거나 worker에
-복사하지 않으며 thread/turn/model 호출은 하지 않는다. 목록 노출은 계정 quota나 모델
+models_cache.json에서 허용된 모델 metadata만 읽을 수 있다. OpenCode는 실행 중인 기존
+service의 model.list만 사용하고 service를 새로 시작하지 않는다. 기존 두-provider
+cache는 유지한 채 OpenCode 항목만 unavailable로 추가할 수 있다. 인증 파일을 읽거나
+worker에 복사하지 않으며 thread/turn/model 호출은 하지 않는다. 목록 노출은 계정 quota나 모델
 추론 성공의 보증이 아니다.
 
 새 선택은 카탈로그에서 검증한다. 같은 원본에 저장된 미등재 선택은 경고와 함께 보존할

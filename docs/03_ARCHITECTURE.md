@@ -7,10 +7,10 @@ flowchart TD
   Timer[서울 scheduler] --> App
   App --> DB[(SQLite: Task·Run·claim·SMTP 원장)]
   DB --> Worker[Research worker]
-  Worker --> Research[Codex / Antigravity Research]
+  Worker --> Research[Codex / Antigravity / OpenCode Research]
   Research --> Gate[구조·파일 검증 / 선택적 dedupe]
   Gate --> Input[불변 Compose 입력]
-  Input --> Compose[Codex / Antigravity Compose]
+  Input --> Compose[Codex / Antigravity / OpenCode Compose]
   Compose --> Validate[메일 검증·archive]
   Validate --> Queue[SMTP 큐]
   Queue --> SMTP[SMTP worker·보호된 계정/주소]

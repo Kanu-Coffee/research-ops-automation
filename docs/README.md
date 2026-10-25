@@ -21,6 +21,8 @@
 | 문서 | 내용 |
 |---|---|
 | [HARDENING](HARDENING.md) | 구현 불변조건과 핵심 검증 경계 |
+| [OPENCODE_RUNNER](OPENCODE_RUNNER.md) | OpenCode v2 세션 API 실행 계약과 한계 |
+| [IMAGE_GENERATION](IMAGE_GENERATION.md) | Task별 이미지 엔진·모델과 자격증명 경계 |
 | [STAGE_MODEL_SETTINGS](STAGE_MODEL_SETTINGS.md) | 단계별 AI와 재실행 계획 |
 | [RESULT_SUBMISSION](RESULT_SUBMISSION.md) | 엄격한 JSON·파일 참조 제출·진단 |
 | [LARGE_TRACE_AND_RECIPIENT_ROUTING](LARGE_TRACE_AND_RECIPIENT_ROUTING.md) | 로그 예산과 그룹 이름 해석 |

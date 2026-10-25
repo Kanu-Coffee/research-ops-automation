@@ -177,6 +177,67 @@ class PreparedDeliveryCoreTests(unittest.TestCase):
         child_root = self.settings.paths.run_archive_dir / child.task_id / child.run_id
         self.assertEqual((child_root / "composition-result.json").read_bytes(), prepared.files["composition-result.json"])
 
+    def test_compose_generated_image_delivery_only_recovery_v2(self):
+        """Newly generated compose image is archived, delivered, and recovered in delivery_only without models."""
+        from tests.test_message_validator import TestMessageValidator
+        import hashlib
+        new_hash = hashlib.sha256(b"v2-image-task").hexdigest()
+        self.version = replace(self.version, version_hash=new_hash,
+                               definition=replace(self.version.definition,
+                               image_generation={"enabled": True, "engine": "codex", "model": "default"}))
+        self.app.task_repo.save_version(self.version)
+        self.app.task_repo.set_active_version(self.version.task_id, new_hash)
+        compose = self.runner.execute_compose
+        def add_new_image(input_dir, tmp_dir, output_dir, project_dir, context):
+            result = compose(input_dir, tmp_dir, output_dir, project_dir, context)
+            raw = TestMessageValidator._png()
+            (output_dir / "generated.png").write_bytes(raw)
+            ledger = {
+                "schema_version": 1,
+                "session_id": "test-session",
+                "engine": "codex",
+                "model": "default",
+                "status": "available",
+                "jobs": [{
+                    "job_id": "job-1",
+                    "status": "available",
+                    "engine": "codex",
+                    "model": "default",
+                    "images": [{
+                        "filename": "generated.png",
+                        "sha256": hashlib.sha256(raw).hexdigest(),
+                        "size_bytes": len(raw),
+                        "mime_type": "image/png"
+                    }]
+                }]
+            }
+            (output_dir / ".image-ledger.json").write_text(json.dumps(ledger), encoding="utf-8")
+            path = output_dir / "email.html"
+            path.write_bytes(path.read_bytes().replace(b"</body>", b'<img src="cid:generated"></body>'))
+            result.image_ledger = ledger
+            return result
+
+        with patch.object(self.runner, "execute_compose", side_effect=add_new_image):
+            source = self.source()
+        prepared = self.prepared(source)
+        self.assertIn("generated.png", prepared.files)
+        child = self.child(source, prepared)
+        with patch.object(self.runner, "execute_compose", side_effect=AssertionError("no compose")), \
+             patch.object(self.runner, "execute_research", side_effect=AssertionError("no research")):
+            completed = self.app.runs.execute_run(child.run_id)
+        self.assertEqual(completed.status, "succeeded", completed.error_message)
+
+        normal = self.app.runs.enqueue_run(self.version.task_id)
+        with patch.object(self.runner, "execute_compose", side_effect=add_new_image):
+            normal_completed = self.app.runs.execute_run(normal.run_id)
+        self.assertEqual(normal_completed.status, "succeeded", normal_completed.error_message)
+        handoff = self.app.delivery_repo.get_handoff_for_run(normal.run_id)
+        self.assertIsNotNone(handoff)
+        attachment_paths = [a["path"] for a in handoff.delivery_request["attachments"]]
+        self.assertIn("generated.png", attachment_paths)
+        archived_image = self.settings.paths.run_archive_dir / normal.task_id / normal.run_id / "generated.png"
+        self.assertTrue(archived_image.is_file())
+
 
 if __name__ == "__main__":
     unittest.main()

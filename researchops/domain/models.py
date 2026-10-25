@@ -21,6 +21,7 @@ class TaskDefinition:
     state: Optional[Dict[str, Any]] = None
     retention: Optional[Dict[str, Any]] = None
     alerting: Optional[Dict[str, Any]] = None
+    image_generation: Optional[Dict[str, Any]] = None
     version: int = 2
 
     def to_dict(self) -> Dict[str, Any]:

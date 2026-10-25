@@ -75,6 +75,36 @@
       "$comment": "The application derives one stable workspace root from the task id. Each Codex invocation receives full read/write/create/delete/execute access to the shared project directory and its current phase staging inside that root; other phase staging, application state, another task workspace, delivery outbox, and external credentials are not exposed.",
       "additionalProperties": false
     },
+    "image_generation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "engine",
+        "model"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "engine": {
+          "enum": [
+            "codex",
+            "opencode",
+            "bailian",
+            "openrouter"
+          ]
+        },
+        "model": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 200
+        }
+      },
+      "$comment": "Independent of Research/Compose LLM selection. Missing field preserves the legacy Codex native image helper behavior."
+    },
     "runner": {
       "type": "object",
       "required": [
@@ -90,6 +120,7 @@
           "enum": [
             "codex_exec",
             "antigravity_exec",
+            "opencode_exec",
             "fake"
           ]
         },
@@ -168,6 +199,7 @@
                   "enum": [
                     "codex_exec",
                     "antigravity_exec",
+                    "opencode_exec",
                     "fake"
                   ]
                 },
@@ -200,6 +232,7 @@
                   "enum": [
                     "codex_exec",
                     "antigravity_exec",
+                    "opencode_exec",
                     "fake"
                   ]
                 },
@@ -243,7 +276,7 @@
           }
         }
       ],
-      "$comment": "Runtime limits are optional operational safeguards. Supported runner types: codex_exec (OpenAI Codex CLI), antigravity_exec (Google Antigravity agy -p CLI), or fake (test doubles). A task requests only an application-approved network profile; it cannot select host-wide access or define its own egress policy. allow_http_requests only grants public read-oriented HTTP access to Research when the network profile is public-research.",
+      "$comment": "Runtime limits are optional operational safeguards. Supported runner types: codex_exec (OpenAI Codex CLI), antigravity_exec (Google Antigravity agy -p CLI), opencode_exec (OpenCode v2 session API control), or fake (test doubles). A task requests only an application-approved network profile; it cannot select host-wide access or define its own egress policy. allow_http_requests only grants public read-oriented HTTP access to Research when the network profile is public-research.",
       "additionalProperties": false
     },
     "instructions": {

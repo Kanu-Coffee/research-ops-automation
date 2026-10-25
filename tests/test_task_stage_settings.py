@@ -19,6 +19,30 @@ class TaskStageSettingsTests(unittest.TestCase):
         self.app.tasks.model_catalog = Mock()
         self.app.tasks.model_catalog.validate_stage.side_effect = lambda value, legacy=None: copy.deepcopy(value)
 
+
+    def test_image_generation_is_independent_and_clone_preserves_it(self):
+        image = {"enabled": True, "engine": "openrouter", "model": "vendor/image-model"}
+        first = self.create(image_generation=image)
+        self.assertEqual(first.definition.image_generation, image)
+        self.assertEqual(self.app.tasks.get_task_editor(first.task_id)["image_generation"], image)
+        changed = {"enabled": False, "engine": "bailian", "model": "qwen-image-3.0"}
+        second = self.edit(image_generation=changed)
+        self.assertEqual(first.definition.image_generation, image)
+        self.assertEqual(second.definition.image_generation, changed)
+        clone = self.create(task_id="image-clone", source_task_id=second.task_id,
+                            source_version_hash=second.version_hash)
+        self.assertEqual(clone.definition.image_generation, changed)
+
+    def test_missing_image_generation_preserves_legacy_codex_default(self):
+        first = self.create()
+        self.assertEqual(first.definition.image_generation,
+                         {"enabled": True, "engine": "codex", "model": None})
+        second = self.edit(name="Renamed")
+        self.assertEqual(second.definition.image_generation, first.definition.image_generation)
+        changed = self.app.tasks.set_image_generation(first.task_id, enabled=False,
+                                                       engine="opencode", model="image-model")
+        self.assertEqual(changed.definition.image_generation,
+                         {"enabled": False, "engine": "opencode", "model": "image-model"})
     def test_create_edit_and_clone_keep_independent_stages(self):
         self.catalog()
         stages = self.stages()

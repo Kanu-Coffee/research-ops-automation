@@ -583,7 +583,7 @@ class RunService:
                                "model_activity_observed": False, "legacy_diagnostics_missing": True}
             count = isolation.get("mcp_tool_count", len(tools))
             count = count if type(count) is int and count >= len(tools) else len(tools)
-            phases.append({"provider": provider if isinstance(provider, str) and provider in {"codex_exec", "antigravity_exec"} else "unknown",
+            phases.append({"provider": provider if isinstance(provider, str) and provider in {"codex_exec", "antigravity_exec", "opencode_exec"} else "unknown",
                 "stage": stage if isinstance(stage, str) and stage in {"research", "compose"} else "unknown",
                 "tools": summaries, "omitted_tool_count": max(0, count - len(summaries)),
                 **({"trace_diagnostics": diagnostics} if diagnostics is not None else {})})

@@ -16,6 +16,6 @@ v1.0.0의 현재 코드 계약을 요약합니다. 기능 제공과 host 격리 
 | 감사 | 호출 trace와 최종 결과 예산 분리, 부분 진단과 완료 증거 구분, archive 보존 |
 | 운영 | offline locked 설치, 별도 SMTP 서비스, guarded backup/restore, 전체 서비스 버전 전환 |
 
-Production의 신뢰 운영 경로는 native Codex/Agy를 사용합니다. 개발용 output-only·native 도구·namespace/cgroup 검증 경로는 서로 다른 목적과 보장을 가지며 운영 경로의 완전한 적대적 Task 격리를 의미하지 않습니다.
+Production의 신뢰 운영 경로는 native Codex/Agy와 OpenCode v2 session API를 사용합니다. 개발용 output-only·native 도구·namespace/cgroup 검증 경로는 서로 다른 목적과 보장을 가지며 운영 경로의 완전한 적대적 Task 격리를 의미하지 않습니다.
 
 세부 기준: [보안](12_SECURITY.md), [최종 제출](RESULT_SUBMISSION.md), [파일](MEDIA_ARTIFACTS.md), [그룹/로그](LARGE_TRACE_AND_RECIPIENT_ROUTING.md), [메일 재시도](EMAIL_RETRY.md), [권한](WEB_UI_AUTH.md), [단계별 AI](STAGE_MODEL_SETTINGS.md).

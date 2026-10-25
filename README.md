@@ -1,8 +1,8 @@
 # ResearchOps
 
-**v1.0.1** · 신뢰할 수 있는 내부 사용자를 위한 조사·이메일 자동화 도구
+**v1.0.2** · 신뢰할 수 있는 내부 사용자를 위한 조사·이메일 자동화 도구
 
-ResearchOps는 Codex CLI 또는 Antigravity CLI로 자료를 조사하고, 조사 결과를 바탕으로 이메일을 작성한 뒤 검증된 원문과 첨부를 SMTP로 전달하는 Python 애플리케이션입니다. Web과 CLI가 같은 실행 큐·Task 버전·감사 이력을 사용하며, 예약과 업무 날짜는 `Asia/Seoul`을 기준으로 합니다.
+ResearchOps는 Codex CLI, Antigravity CLI 또는 OpenCode v2로 자료를 조사하고, 조사 결과를 바탕으로 이메일을 작성한 뒤 검증된 원문과 첨부를 SMTP로 전달하는 Python 애플리케이션입니다. Web과 CLI가 같은 실행 큐·Task 버전·감사 이력을 사용하며, 예약과 업무 날짜는 `Asia/Seoul`을 기준으로 합니다.
 
 ## 제공 기능
 
@@ -36,7 +36,7 @@ uv build --no-sources
 
 Linux 단일 호스트, 로컬 SQLite, Python 3.12 이상을 기준으로 합니다. 사용자 서비스 예제는 systemd 254 이상과 cgroup v2의 해당 사용자 서비스 위임을 요구합니다. Web 외부 접속은 TLS reverse proxy를 사용합니다.
 
-Production native runner는 **신뢰된 내부 사용자의 작업 실행 모드**입니다. Codex의 workspace-write와 Antigravity의 호출별 자동 승인·sandbox 해제는 적대적 Task의 강제 격리를 보장하지 않습니다. 동일 OS 계정의 파일 접근, 모든 외부 통신, 영구 디스크 quota에 대한 완전한 격리는 제공하지 않습니다. [보안 경계](docs/12_SECURITY.md)를 확인한 뒤 사용할 계정과 호스트를 선택하세요.
+Production native runner는 **신뢰된 내부 사용자의 작업 실행 모드**입니다. Codex의 workspace-write, Antigravity의 호출별 자동 승인·sandbox 해제, OpenCode의 호출별 session permissions는 적대적 Task의 강제 격리를 보장하지 않습니다. 동일 OS 계정의 파일 접근, 모든 외부 통신, 영구 디스크 quota에 대한 완전한 격리는 제공하지 않습니다. [보안 경계](docs/12_SECURITY.md)와 [OpenCode runner](docs/OPENCODE_RUNNER.md)를 확인한 뒤 사용할 계정과 호스트를 선택하세요.
 
 이 릴리스에는 실제 운영 계정·주소·비밀번호·DB·로그·Task 문서를 포함하지 않습니다. 사용 가이드의 계정·호스트·프로젝트는 익명 예시이며, 특정 운영 환경의 구축 또는 실발송 성공을 보장하는 자료가 아닙니다.
 

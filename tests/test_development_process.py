@@ -40,6 +40,55 @@ class DevelopmentProcessTests(unittest.TestCase):
         for key in ("group_signal_succeeded", "direct_child_reaped", "captured_pipes_eof", "process_group_quiescent"):
             self.assertTrue(result.cleanup_evidence[key], key)
 
+    def test_direct_stdout_is_regular_and_preserves_large_utf8(self):
+        result = self.execute(
+            "import os,stat; assert stat.S_ISREG(os.fstat(1).st_mode); "
+            "os.write(1, ('서울'*200000).encode())", direct_stdout=True)
+        self.assertEqual(result.stdout, ('서울'*200000).encode())
+        self.assertEqual(result.stdout_bytes, 1200000)
+        self.assertEqual(result.exit_code, 0)
+        self.assertTrue(result.cleanup_verified)
+        self.assertIsNone(result.error)
+        self.assertEqual(list(self.cwd.iterdir()), [])
+
+    def test_direct_stdout_remains_size_bounded(self):
+        result = self.execute("import os; os.write(1,b'x'*1000000)",
+                              direct_stdout=True, max_output_bytes=10000)
+        self.assertLessEqual(len(result.stdout), 10000)
+        # A short write may itself succeed at the file limit; trying another
+        # byte must fail rather than allowing the temporary file to grow.
+        result = self.execute("import os; os.write(1,b'x'*1000000); os.write(1,b'y')",
+                              direct_stdout=True, max_output_bytes=10000)
+        self.assertTrue(result.error is not None or result.exit_code != 0)
+        self.assertLessEqual(len(result.stdout), 10000)
+        self.assertTrue(result.cleanup_verified)
+
+    def test_direct_stdout_combined_stderr_budget(self):
+        result = self.execute("import os; os.write(1,b'x'*9000); os.write(2,b'y'*9000)",
+                              direct_stdout=True, max_output_bytes=10000)
+        self.assertEqual(result.error, 'output_limit_exceeded')
+        self.assertLessEqual(len(result.stdout)+len(result.stderr), 10000)
+        self.assertTrue(result.cleanup_verified)
+
+    def test_direct_stdout_timeout_preserves_partial_output_and_cleans_up(self):
+        result = self.execute("import os,time; os.write(1,b'partial'); time.sleep(10)",
+                              direct_stdout=True, timeout_seconds=1)
+        self.assertTrue(result.timed_out)
+        self.assertEqual(result.stdout, b'partial')
+        self.assertTrue(result.cleanup_verified)
+
+    def test_direct_stdout_cancellation_cleans_up(self):
+        started = time.monotonic()
+        result = self.execute("import os,time; os.write(1,b'partial'); time.sleep(10)",
+                              direct_stdout=True,
+                              cancellation_check=lambda: time.monotonic()-started > .2)
+        self.assertTrue(result.cancelled)
+        self.assertTrue(result.cleanup_verified)
+
+    def test_direct_stdout_rejects_ambiguous_capture(self):
+        with self.assertRaises(ValueError):
+            self.execute("pass", direct_stdout=True, stdout_path=self.cwd/'stdout')
+
     def test_nonzero_exit_does_not_invent_transport_error(self):
         result = self.execute("import sys; print('bad', file=sys.stderr); sys.exit(7)")
         self.assertEqual(result.exit_code, 7)

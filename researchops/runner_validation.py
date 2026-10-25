@@ -18,12 +18,13 @@ from researchops.config import bundled_path, load_settings
 from researchops.runners.antigravity import AntigravityRunner
 from researchops.runners.codex import CodexRunner
 from researchops.runners.fake import FakeRunner
+from researchops.runners.opencode import OpenCodeRunner
 from researchops.services.application import ApplicationService
 from researchops.workspace.security import read_safe_bytes
 
 
 SAMPLE_NAMES = ("document-extract", "numeric-compare", "partial-coverage", "no-updates")
-RUNNER_NAMES = ("fake", "codex_exec", "antigravity_exec")
+RUNNER_NAMES = ("fake", "codex_exec", "antigravity_exec", "opencode_exec")
 
 
 def _json(path):
@@ -110,7 +111,8 @@ def _run_validation(root, selected, cases, preflight, *, live=False, samples=SAM
     settings.paths.repo_root = root
     # One read-only probe per engine. Blocked sample dependencies do not create
     # repeated adapter calls, provider sessions, or misleading failed run rows.
-    for name, runner in (("codex_exec", CodexRunner()), ("antigravity_exec", AntigravityRunner())):
+    for name, runner in (("codex_exec", CodexRunner()), ("antigravity_exec", AntigravityRunner()),
+                         ("opencode_exec", OpenCodeRunner())):
         if name not in selected:
             continue
         preflight[name] = runner.preflight()
@@ -138,6 +140,7 @@ def _run_validation(root, selected, cases, preflight, *, live=False, samples=SAM
                     "archive": str(settings.paths.run_archive_dir / recent[0].task_id / recent[0].run_id) if recent else None})
     if live:
         from researchops.runners.development_runner import OutputOnlyDevelopmentRunner
+        from researchops.runners.opencode import OpenCodeOutputOnlyRunner
         for provider in selected:
             if provider == "fake":
                 continue
@@ -168,8 +171,15 @@ def _run_validation(root, selected, cases, preflight, *, live=False, samples=SAM
                     continue
                 package = live_root / "tasks" / name
                 expected = _json(package / "fixtures/expected.json")
-                runner = OutputOnlyDevelopmentRunner(provider, name, approval=True,
-                    evidence_dir=live_root / "control-evidence" / name, timeout_seconds=timeout_seconds, model=model)
+                if provider == "opencode_exec":
+                    runner = OpenCodeOutputOnlyRunner(provider, name, approval=True,
+                        evidence_dir=live_root / "control-evidence" / name,
+                        timeout_seconds=timeout_seconds, model=model,
+                        binary=live_settings.runner.opencode_binary)
+                else:
+                    runner = OutputOnlyDevelopmentRunner(provider, name, approval=True,
+                        evidence_dir=live_root / "control-evidence" / name,
+                        timeout_seconds=timeout_seconds, model=model)
                 try:
                     case = _check_sample(live_app, versions[expected["task_id"]], package, runner=runner, runner_name=provider)
                 except Exception as exc:
@@ -195,7 +205,7 @@ def validate_runners(runners=None, *, output_parent=None, live=False, samples=No
     """
     selected = tuple(dict.fromkeys(RUNNER_NAMES if runners is None else runners))
     if not selected or any(name not in RUNNER_NAMES for name in selected):
-        raise ValueError("Select fake, codex_exec, or antigravity_exec")
+        raise ValueError("Select fake, codex_exec, antigravity_exec or opencode_exec")
     sample_names = tuple(dict.fromkeys(SAMPLE_NAMES if samples is None else samples))
     if not sample_names or any(name not in SAMPLE_NAMES for name in sample_names):
         raise ValueError("Select only bundled synthetic sample names")

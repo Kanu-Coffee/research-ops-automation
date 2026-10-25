@@ -5,7 +5,7 @@ v1.0.0에 포함된 기능은 [릴리스 범위](STATUS.md)에 정리합니다. 
 | 영역 | 후속 검토 내용 |
 |---|---|
 | 적대적 Task 격리 | credential/control 분리, 모든 egress 경로 제어, Task별 영구 bytes/inode quota |
-| Provider 동등성 | Antigravity phase별 예방적 도구·MCP 차단, CLI 변화에 대한 실제 호환 검증 |
+| Provider 동등성 | Antigravity phase별 예방적 도구·MCP 차단, OpenCode MCP 합성 주입·durable log/SSE, CLI/API 변화에 대한 실제 호환 검증 |
 | 운영 자동화 | 검증된 upgrade controller, 배포·migration·복구 상태의 자동 관리 |
 | 가용성 | 다중 호스트 실행·분산 scheduler·active-active DB 전략 |
 | 계정 관리 | 명시적인 자원 소유권 이전, 필요한 조직 인증·복구 흐름 |

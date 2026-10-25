@@ -18,7 +18,7 @@ uv run --frozen researchctl validate-runners --live \
   --runner codex_exec --sample numeric-compare --json
 ```
 
-`--runner`는 `fake`, `codex_exec`, `antigravity_exec` 중 선택하며 반복할 수 있다.
+`--runner`는 `fake`, `codex_exec`, `antigravity_exec`, `opencode_exec` 중 선택하며 반복할 수 있다.
 `--sample`도 반복할 수 있고, 생략하면 다음 네 입력을 사용한다.
 
 | 입력 | 확인하는 동작 |
@@ -41,7 +41,10 @@ uv run --frozen researchctl validate-runners --live \
 workspace에 복사하거나 symlink하지 않는다.
 
 실제 모델 검증은 output-only adapter를 사용한다. Codex는 read-only 설정과 도구 비활성화,
-Agy는 sandbox 요청 및 관찰된 동작 검사를 적용한다. 두 엔진의 도구 계약은 같지 않다.
+Agy는 sandbox 요청 및 관찰된 동작 검사를 적용한다. OpenCode는 기존 background service의
+빈 session에서 모든 tool permission을 deny하고, 완료·idle·남은 shell 부재를 확인한다.
+OpenCode의 실제 응답 시간은 provider 상태에 따라 달라질 수 있으며, phase deadline을
+넘긴 실행은 timeout 실패로 보존한다. 세 엔진의 도구 계약은 같지 않다.
 반환 JSON·고정 파일명·입력/결과 identity·출력 상한·HTML/text 계약·archive hash와
 process 종료·lease 해제를 검사한다. 반환한 본문은 다시 렌더링하지 않는다.
 

@@ -85,7 +85,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     validation = subparsers.add_parser("validate-runners", parents=[common_parser],
         help="Validate bundled synthetic samples in a fresh runtime; --live explicitly enables model calls")
-    validation.add_argument("--runner", action="append", choices=["fake", "codex_exec", "antigravity_exec"],
+    validation.add_argument("--runner", action="append", choices=["fake", "codex_exec", "antigravity_exec", "opencode_exec"],
         help="Repeat to select engines (default: all; real preflight blockers return exit 78)")
     validation.add_argument("--output-parent", help="Existing directory for a new private evidence subdirectory (default: temporary directory)")
     validation.add_argument("--live", action="store_true", help="Explicitly authorize real CLI model calls for bundled synthetic samples only; SMTP remains dry-run")
@@ -95,7 +95,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     tool_validation = subparsers.add_parser("validate-runner-tools", parents=[common_parser],
         help="Explicit native file/code/web/MCP capability probes in temporary workspaces; no SMTP")
-    tool_validation.add_argument("--runner", action="append", choices=["codex_exec", "antigravity_exec"])
+    tool_validation.add_argument("--runner", action="append", choices=["codex_exec", "antigravity_exec", "opencode_exec"])
     tool_validation.add_argument("--scenario", action="append", choices=["file-write", "file-code", "code-repair", "web-search", "mcp-research", "mcp-public-docs", "combined-research"])
     tool_validation.add_argument("--live", action="store_true", help="Authorize trusted native tool/model calls; preserve CLI permissions unless separate Agy auto-approval is selected")
     tool_validation.add_argument("--agy-dangerously-skip-permissions", action="store_true",
@@ -115,12 +115,36 @@ def build_parser() -> argparse.ArgumentParser:
     boundary.add_argument("--timeout-seconds", type=int, default=120)
     boundary.add_argument("--model", help="Optional explicit model; requires --live")
 
+    # model catalog
+    models_parser = subparsers.add_parser("models", parents=[common_parser],
+        help="List runner model metadata with providerID/catalog identity")
+    models_parser.add_argument("--refresh", action="store_true", help="Refresh model metadata")
+
+    # image generation
+    image_parser = subparsers.add_parser("image", parents=[common_parser], help="Task-scoped image generation engines")
+    image_sub = image_parser.add_subparsers(dest="image_command", help="Image commands")
+    image_models = image_sub.add_parser("models", parents=[common_parser], help="List known image-capability models")
+    image_models.add_argument("--engine", choices=["codex", "opencode", "bailian", "openrouter"], required=True)
+    image_generate = image_sub.add_parser("generate", parents=[common_parser], help="Generate explicit synthetic images")
+    image_generate.add_argument("--engine", choices=["codex", "opencode", "bailian", "openrouter"], required=True)
+    image_generate.add_argument("--model", default=None)
+    image_generate.add_argument("--prompt", action="append", required=True)
+    image_generate.add_argument("--filename", action="append", required=True)
+    image_generate.add_argument("--out-dir", required=True)
+
     # task
     task_parser = subparsers.add_parser("task", parents=[common_parser], help="Manage task definitions and versions")
     task_sub = task_parser.add_subparsers(dest="task_command", help="Task subcommands")
 
     task_sub.add_parser("sync", parents=[common_parser], help="Sync canonical task packages from tasks directory")
     task_sub.add_parser("list", parents=[common_parser], help="List all registered tasks")
+
+    image_task_p = task_sub.add_parser("image", parents=[common_parser],
+        help="Show or update a task's independent image generation engine/model")
+    image_task_p.add_argument("task_id", type=str, help="Task ID")
+    image_task_p.add_argument("--enabled", choices=["on", "off"], default=None)
+    image_task_p.add_argument("--engine", choices=["codex", "opencode", "bailian", "openrouter"], default=None)
+    image_task_p.add_argument("--model", default=None)
 
     show_task_p = task_sub.add_parser("show", parents=[common_parser], help="Show task details")
     show_task_p.add_argument("task_id", type=str, help="Task ID")
@@ -207,7 +231,7 @@ def build_parser() -> argparse.ArgumentParser:
                              help="Explicit retry scope; omitted preserves the previous scope")
     for retry_parser in (run_retry_p, run_comp_p):
         for stage in ("research", "compose"):
-            retry_parser.add_argument("--" + stage + "-provider", choices=("codex_exec", "antigravity_exec"), default=None)
+            retry_parser.add_argument("--" + stage + "-provider", choices=("codex_exec", "antigravity_exec", "opencode_exec"), default=None)
             retry_parser.add_argument("--" + stage + "-model", default=None, help="Model ID, or default for CLI default")
             retry_parser.add_argument("--" + stage + "-effort", default=None, help="Model-supported effort, or default")
 
@@ -433,6 +457,22 @@ def main(argv: Optional[List[str]] = None) -> int:
                 format_output({"status": "password_reset", "username": args.username}, as_json)
                 return 0
 
+        elif args.subcommand == "models":
+            format_output(app.model_catalog.snapshot(refresh=args.refresh), as_json)
+            return 0
+        elif args.subcommand == "image":
+            if args.image_command == "models":
+                format_output({"engine": args.engine,
+                               "models": app.image_generation.models(args.engine)}, as_json)
+                return 0
+            if len(args.prompt) != len(args.filename) or not 1 <= len(args.prompt) <= 4:
+                raise ResearchOpsError("Provide matching 1–4 --prompt/--filename pairs")
+            briefs = [{"filename": name, "prompt": prompt}
+                      for prompt, name in zip(args.prompt, args.filename)]
+            result = app.image_generation.generate(
+                briefs, engine=args.engine, model=args.model, artifact_root=args.out_dir)
+            format_output(result, as_json)
+            return 0 if result.get("status") == "available" else 1
         elif args.subcommand == "task":
             cmd = args.task_command
             if cmd == "sync":
@@ -444,6 +484,20 @@ def main(argv: Optional[List[str]] = None) -> int:
                 return 0
             elif cmd == "show":
                 format_output(app.tasks.show_task(args.task_id), as_json)
+                return 0
+            elif cmd == "image":
+                editor = app.tasks.get_task_editor(args.task_id)
+                current = editor.get("image_generation") or {"enabled": True, "engine": "codex", "model": None}
+                if args.enabled is None and args.engine is None and args.model is None:
+                    format_output(current, as_json)
+                    return 0
+                enabled = current["enabled"] if args.enabled is None else args.enabled == "on"
+                engine = current["engine"] if args.engine is None else args.engine
+                model = current["model"] if args.model is None else (args.model or None)
+                version = app.tasks.set_image_generation(args.task_id, enabled=enabled,
+                                                          engine=engine, model=model)
+                format_output({"task_id": args.task_id, "version_hash": version.version_hash,
+                               "image_generation": version.definition.image_generation}, as_json)
                 return 0
             elif cmd == "validate":
                 ok, errs, warns = app.tasks.validate_task(args.task_id)

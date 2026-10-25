@@ -256,6 +256,19 @@ class WebRouter:
                 operating_state=operating_state, model_catalog=self.app.model_catalog.snapshot(refresh=False))
             return status, {"Content-Type": "text/html; charset=utf-8"}, html_body.encode("utf-8")
 
+
+        def posted_image_generation():
+            if "image_engine" not in form_data and "image_generation" not in json_data:
+                return None
+            if "image_generation" in json_data:
+                value = json_data["image_generation"]
+                if not isinstance(value, dict):
+                    raise ValidationError("이미지 생성 설정 형식이 올바르지 않습니다.")
+                return value
+            engine = get_field("image_engine", "codex")
+            model = get_field("image_model").strip() or None
+            return {"enabled": get_field("image_enabled") == "true",
+                    "engine": engine, "model": model}
         def posted_stage_settings(stages=("research", "compose"), *, key="stage_settings"):
             if key in json_data:
                 value = json_data[key]
@@ -340,6 +353,9 @@ class WebRouter:
             staged = posted_stage_settings()
             if staged is not None:
                 values["stage_settings"] = staged
+            posted_image = posted_image_generation()
+            if posted_image is not None:
+                values["image_generation"] = posted_image
             return values
 
         try:
@@ -712,6 +728,7 @@ class WebRouter:
                             sender_profile_id=get_field("sender_profile_id", "default"),
                             cron=cron_from_form(get_field), schedule_enabled=values["schedule_enabled"],
                             model=get_field("model").strip() or None,
+                            image_generation=posted_image_generation(),
                             **({"stage_settings": values["stage_settings"]} if "stage_settings" in values else {}))
                     except ResearchOpsError as e:
                         return task_editor_response(values, mode="edit", error=str(e), status=400)
@@ -748,6 +765,7 @@ class WebRouter:
                             cron=cron_from_form(get_field),
                             schedule_enabled=scheduled,
                             model=get_field("model").strip() or None,
+                            image_generation=posted_image_generation(),
                             request_key=get_field("request_key") or None,
                             **({"stage_settings": values["stage_settings"]} if "stage_settings" in values else {}),
                         )

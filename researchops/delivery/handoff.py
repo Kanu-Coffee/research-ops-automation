@@ -58,7 +58,8 @@ class HandoffPublisher:
             bodies[kind] = {"path": path, "sha256": file_hashes[kind], "media_type": media,
                             "size_bytes": len(content)}
         from researchops.delivery.artifact_integrity import delivery_artifacts
-        attachments = delivery_artifacts(comp_input)
+        compose_artifacts = (binding.get("compose_artifacts") if binding else None) or file_hashes.get("compose_artifacts")
+        attachments = delivery_artifacts(comp_input, compose_artifacts=compose_artifacts)
         request = {"schema_version": 2, "handoff_id": handoff_id, "idempotency_key": key,
             "task_id": run.task_id, "run_id": run.run_id, "task_version_hash": run.task_version_hash,
             "message_revision": revision, "message_type": task_def.delivery.get("message_type", "market_digest"),

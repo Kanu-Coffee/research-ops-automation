@@ -17,7 +17,10 @@ paths:
 runner:
   codex_binary: codex
   antigravity_binary: agy
-  default_type: codex_exec  # codex_exec | antigravity_exec | fake
+  # Absolute path is supported when the OpenCode v2 binary is not on the
+  # service account PATH (for example /home/<user>/.opencode/bin/opencode).
+  opencode_binary: opencode
+  default_type: codex_exec  # codex_exec | antigravity_exec | opencode_exec | fake
   default_sandbox: task-workspace
   default_network_profile: none
   default_timeout_seconds: 7200
@@ -62,6 +65,14 @@ worker:
   error_backoff_initial_seconds: 5
   error_backoff_max_seconds: 60
   max_consecutive_errors: 5
+
+image_services:
+  # Optional protected local file containing an OpenRouter API key (one line).
+  # Never place the key in a Task, prompt, worker environment or public log.
+  openrouter_api_key_file: null
+  openrouter_base_url: https://openrouter.ai/api/v1
+  openrouter_timeout_seconds: 120
+  max_image_bytes: 4194304
 
 delivery:
   global_handoff_kill_switch: true

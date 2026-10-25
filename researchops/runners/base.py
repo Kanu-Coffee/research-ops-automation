@@ -19,6 +19,7 @@ class RunnerInvocationContext:
     allow_http_requests: bool = False
     http_proxy_profile: Dict[str, Any] = field(default_factory=dict)
     resource_profile: str = "standard-research"
+    image_generation: Dict[str, Any] = field(default_factory=dict)
     fencing_token: Optional[str] = None
     cancellation_check: Optional[Callable[[], bool]] = field(default=None, repr=False)
     timezone: str = "Asia/Seoul"
@@ -52,6 +53,8 @@ class RunnerExecutionResult:
     log_files: Dict[str, Path] = field(default_factory=dict)
     log_sizes: Dict[str, int] = field(default_factory=dict)
     response_diagnostic: Optional[Dict[str, Any]] = None
+    # Controller-owned image receipts; never reconstructed from worker files.
+    image_ledger: Optional[Dict[str, Any]] = None
 
 
 def safe_response_diagnostic(value: Any) -> Optional[Dict[str, Any]]:

@@ -104,12 +104,15 @@ def validate_artifact_contract(comp_input):
         raise ValidationError("Composition omits an approved artifact")
 
 
-def composition_binding(comp_input, result_bytes, file_evidence):
+def composition_binding(comp_input, result_bytes, file_evidence, compose_artifacts=None):
     """Original result stays untouched; this controller record authenticates its files."""
-    return {"schema_version": 1, **_identity(comp_input),
+    data = {"schema_version": 1, **_identity(comp_input),
         "composition_input_sha256": _digest(comp_input.to_dict()),
         "composition_result_sha256": hashlib.sha256(result_bytes).hexdigest(),
         "artifact_report_sha256": _digest(comp_input.artifact_report), "files": file_evidence}
+    if compose_artifacts:
+        data["compose_artifacts"] = compose_artifacts
+    return data
 
 
 def require_stored_composition(db, task_def, run_id, version_hash, revision, group_id, *,
@@ -180,15 +183,16 @@ def require_stored_composition(db, task_def, run_id, version_hash, revision, gro
         raise DeliveryError("Original artifact composition result is invalid") from exc
     if selected != group_id or normalized != result.to_dict():
         raise DeliveryError("Original composition result differs from its stored normalized result")
-    artifacts = saved_input.inline_artifacts + saved_input.attachments
-    expected_paths = [result.html_path, result.text_path, *(a["path"] for a in artifacts)]
+    artifacts = list(saved_input.inline_artifacts) + list(saved_input.attachments)
+    compose_artifacts = binding.get("compose_artifacts") or []
+    expected_paths = [result.html_path, result.text_path, *(a["path"] for a in artifacts), *(a["path"] for a in compose_artifacts)]
     files = binding.get("files")
     if not isinstance(files, dict) or len(expected_paths) != len(set(expected_paths)) or set(files) != set(expected_paths):
         raise DeliveryError("Stored composition file inventory is incomplete")
-    for artifact in artifacts:
+    for artifact in artifacts + compose_artifacts:
         if files[artifact["path"]] != {k: artifact[k] for k in ("sha256", "size_bytes")}:
             raise DeliveryError("Artifact byte evidence differs from the sealed input")
-    if binding != composition_binding(saved_input, raw_result, files):
+    if binding != composition_binding(saved_input, raw_result, files, compose_artifacts=compose_artifacts):
         raise DeliveryError("Stored composition binding hashes do not match")
     if request is not None and request.get("composition_binding_sha256") != _digest(binding):
         raise DeliveryError("Delivery request is not bound to this artifact composition")
@@ -212,12 +216,12 @@ def require_stored_composition(db, task_def, run_id, version_hash, revision, gro
         for info in request["body"].values():
             if {k: info[k] for k in ("sha256", "size_bytes")} != files[info["path"]]:
                 raise DeliveryError("Delivery body hash differs from the validated composition")
-        if request["attachments"] != delivery_artifacts(saved_input):
+        if request["attachments"] != delivery_artifacts(saved_input, compose_artifacts=compose_artifacts):
             raise DeliveryError("Delivery attachments differ from the approved artifact inventory")
     return binding
 
 
-def delivery_artifacts(comp_input):
+def delivery_artifacts(comp_input, compose_artifacts=None):
     """Project the sealed media inventory onto the existing SMTP package contract."""
     result = []
     for disposition, artifacts in (("inline", comp_input.inline_artifacts), ("attachment", comp_input.attachments)):
@@ -226,4 +230,10 @@ def delivery_artifacts(comp_input):
                 "media_type": artifact.get("mime_type", artifact.get("media_type", "application/octet-stream")),
                 "size_bytes": artifact["size_bytes"], "sha256": artifact["sha256"], "disposition": disposition,
                 **({"content_id": artifact["cid"]} if disposition == "inline" else {})})
+    if compose_artifacts:
+        for artifact in compose_artifacts:
+            result.append({"path": artifact["path"], "filename": artifact.get("filename") or Path(artifact["path"]).name,
+                "media_type": artifact.get("mime_type", "image/png"),
+                "size_bytes": artifact["size_bytes"], "sha256": artifact["sha256"], "disposition": "inline",
+                "content_id": artifact["cid"]})
     return result

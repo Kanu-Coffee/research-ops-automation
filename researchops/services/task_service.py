@@ -327,7 +327,8 @@ class TaskService:
                                recipient_routing_mode: Optional[str] = None,
                                stage_settings: Optional[dict] = None,
                                recipient_visibility: str = "to",
-                               allow_http_requests: Optional[bool] = None) -> TaskVersion:
+                               allow_http_requests: Optional[bool] = None,
+                               image_generation: Optional[dict] = None) -> TaskVersion:
         """Publish operator instructions directly for real execution and delivery.
 
         Repeating the exact task ID/package is idempotent; a conflicting existing
@@ -352,7 +353,8 @@ class TaskService:
             email_spec_md=email_spec_md, sender_profile_id=sender_profile_id,
             recipient_routing_mode=recipient_routing_mode or ("legacy_ids" if recipient_group_id else "catalog_name"),
             stage_settings=self._normalize_stage_settings(stage_settings) if not source_task_id else None,
-            recipient_visibility=recipient_visibility, allow_http_requests=new_task_http)
+            recipient_visibility=recipient_visibility, allow_http_requests=new_task_http,
+            image_generation=image_generation)
         if source_task_id:
             self._require_not_deleted(source_task_id)
             source = self.task_repo.get_active_version(source_task_id)
@@ -368,7 +370,8 @@ class TaskService:
                 recipient_group_id=recipient_group_id, sender_profile_id=sender_profile_id,
                 cron=cron, schedule_enabled=schedule_enabled, model=model,
                 recipient_routing_mode=recipient_routing_mode, stage_settings=stage_settings,
-                recipient_visibility=recipient_visibility, allow_http_requests=allow_http_requests)
+                recipient_visibility=recipient_visibility, allow_http_requests=allow_http_requests,
+                image_generation=image_generation)
         definition_dict = yaml.safe_load(files["task.yaml"])
         self.loader.validate_package(definition_dict, files)
         definition = TaskDefinition(**definition_dict)
@@ -404,6 +407,7 @@ class TaskService:
             "email_spec_md": version.package_files.get("email_spec.md", ""),
             "runner_type": task.runner["type"], "model": task.runner.get("model") or "",
             "allow_http_requests": task.runner.get("allow_http_requests") is True,
+            "image_generation": task.image_generation or {"enabled": True, "engine": "codex", "model": None},
             "stage_settings": resolve_task_stages(task),
             "cron": (task.schedule or {}).get("cron", "0 9 * * *"),
             "enabled": bool(status["enabled"]), "schedule_enabled": bool(status["enabled"]),
@@ -423,7 +427,8 @@ class TaskService:
                       recipient_routing_mode: Optional[str] = None,
                       stage_settings: Optional[dict] = None,
                       recipient_visibility: str = "to",
-                      allow_http_requests: Optional[bool] = None) -> Dict[str, str]:
+                      allow_http_requests: Optional[bool] = None,
+                      image_generation: Optional[dict] = None) -> Dict[str, str]:
         # Reuse input validation only, never the generated package/body template.
         from researchops.package.production_template import build_production_package
         old_mode = source.definition.delivery.get("recipient_routing_mode", "legacy_ids")
@@ -431,7 +436,8 @@ class TaskService:
         build_production_package(task_id=task_id, name=name, instructions=instructions,
             runner_type=runner_type, recipient_group_id=recipient_group_id, cron=cron,
             schedule_enabled=schedule_enabled, model=model, email_spec_md=email_spec_md,
-            sender_profile_id=sender_profile_id, recipient_routing_mode=routing_mode)
+            sender_profile_id=sender_profile_id, recipient_routing_mode=routing_mode,
+            image_generation=image_generation)
         files = dict(source.package_files)
         config = source.definition.to_dict()
         config.update(id=task_id, name=name.strip(), enabled=schedule_enabled)
@@ -448,6 +454,10 @@ class TaskService:
         if stages is not None:
             config["runner"]["stages"] = stages
             config["runner"].update(stages["research"])
+        if image_generation is not None:
+            config["image_generation"] = dict(image_generation)
+        elif "image_generation" not in config:
+            config["image_generation"] = {"enabled": True, "engine": "codex", "model": None}
         config["delivery"]["sender_profile_id"] = sender_profile_id
         if recipient_visibility == "bcc":
             config["delivery"]["recipient_visibility"] = "bcc"
@@ -514,7 +524,8 @@ class TaskService:
                                recipient_routing_mode: Optional[str] = None,
                                stage_settings: Optional[dict] = None,
                                recipient_visibility: str = "to",
-                               allow_http_requests: Optional[bool] = None) -> TaskVersion:
+                               allow_http_requests: Optional[bool] = None,
+                               image_generation: Optional[dict] = None) -> TaskVersion:
         """Save a real task in place, retaining its identity and immutable history."""
         if self.settings.environment != "production":
             raise ValidationError("Direct task editing requires the production environment")
@@ -531,7 +542,8 @@ class TaskService:
             recipient_group_id=recipient_group_id, sender_profile_id=sender_profile_id,
             cron=cron, schedule_enabled=schedule_enabled, model=model,
             recipient_routing_mode=recipient_routing_mode, stage_settings=stage_settings,
-            recipient_visibility=recipient_visibility, allow_http_requests=allow_http_requests)
+            recipient_visibility=recipient_visibility, allow_http_requests=allow_http_requests,
+            image_generation=image_generation)
         config = yaml.safe_load(files["task.yaml"])
         self.loader.validate_package(config, files)
         definition = TaskDefinition(**config)
@@ -545,6 +557,33 @@ class TaskService:
             schedule_enabled=schedule_enabled, expected_delivery_mode=status["delivery_mode"],
             expected_updated_at=expected_updated_at)
         return self.task_repo.get_version(version_hash)
+
+
+    def set_image_generation(self, task_id: str, *, enabled: bool, engine: str,
+                             model: Optional[str]) -> TaskVersion:
+        """Update only the task-owned image engine/model through the normal edit guard."""
+        editor = self.get_task_editor(task_id)
+        if type(enabled) is not bool:
+            raise ValidationError("Image enablement must be a boolean")
+        if engine not in {"codex", "opencode", "bailian", "openrouter"}:
+            raise ValidationError("Unsupported image engine")
+        if model is not None and (not isinstance(model, str) or not 1 <= len(model) <= 200
+                                  or any(c in model for c in "\r\n\x00")):
+            raise ValidationError("Invalid image model")
+        return self.update_production_task(
+            task_id, expected_version_hash=editor["expected_version_hash"],
+            expected_updated_at=editor["expected_updated_at"],
+            name=editor["name"], instructions=editor["instructions"],
+            email_spec_md=editor["email_spec_md"], task_md=editor["task_md"],
+            runner_type=editor["runner_type"],
+            recipient_group_id=editor["recipient_group_id"],
+            recipient_routing_mode=editor["recipient_routing_mode"],
+            recipient_visibility=editor["recipient_visibility"],
+            sender_profile_id=editor["sender_profile_id"],
+            cron=editor["cron"], schedule_enabled=editor["schedule_enabled"],
+            model=editor["model"] or None, allow_http_requests=editor["allow_http_requests"],
+            stage_settings=editor["stage_settings"],
+            image_generation={"enabled": enabled, "engine": engine, "model": model})
 
     def get_task_advanced_editor(self, task_id: str) -> Dict[str, Any]:
         """Read the active immutable package without saving intermediate state."""

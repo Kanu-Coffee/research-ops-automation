@@ -16,10 +16,30 @@ uv run --frozen researchctl validate-runner-tools --live \
   --runner codex_exec --scenario file-code --timeout-seconds 180 --json
 ```
 
-`--runner`는 `codex_exec` 또는 `antigravity_exec`, `--scenario`는 아래 값이며 반복할 수
-있다. 생략하면 전체를 선택한다. timeout은 1~300초, 기본 180초다. `--model`은 `--live`와
-함께 사용할 선택값이다. `--output-parent`에는 기존 증거 부모 디렉터리를 지정한다.
-운영 `--config`는 받지 않으며 매 실행 새 private workspace/control/evidence를 만든다.
+`--runner`는 `codex_exec`, `antigravity_exec` 또는 `opencode_exec`, `--scenario`는 아래
+값이며 반복할 수 있다. 생략하면 전체를 선택한다. timeout은 1~300초, 기본 180초다.
+`--model`은 `--live`와 함께 사용할 선택값이다. `--output-parent`에는 기존 증거 부모
+디렉터리를 지정한다. 운영 `--config`는 받지 않으며 매 실행 새 private
+workspace/control/evidence를 만든다.
+
+OpenCode는 현재 `file-write`, `file-code`, `code-repair`, `web-search`를 같은 합성
+workspace에서 검사한다. `mcp-research`와 `mcp-public-docs`는 test 전용 MCP를 호출별로
+주입하는 공식 경로가 없어 `OPENCODE-MCP-PROVISIONING-UNSUPPORTED`로 차단한다. OpenCode
+검증도 실제 파일 bytes·생성 코드 실행·단위 테스트·관찰된 tool 상태와 session cleanup을
+확인하며, 모델의 성공 문구만으로 통과하지 않는다.
+
+OpenCode의 `code-repair`는 실제 `python -m unittest` 명령 위치와 대상 테스트를 확인하고,
+모델이 실행한 동일 테스트의 실패(`FAILED` marker) → 정확한 `metrics.py` 수정 → 같은
+테스트의 성공(`OK`, exit 0, 실행 test count) 순서, 세 테스트 존재, 테스트 파일 write
+hash와 실제 파일 일치를 함께 요구한다. `echo`/주석/문자열에 테스트 이름만 포함한 명령,
+다른 테스트 대상, 0-test 실행, 실패한 write/edit, controller-only 실행은 인정하지 않는다.
+또한 `;`, `&&`, pipe, redirection, comment 등 simple command 경계를 넘어 다른 명령의
+파일 인자를 대상 테스트로 귀속하지 않으며, 대상 unittest가 정확히 한 번 실행된 경우만
+실행 증거로 인정한다. 복수 실행·불확실한 shell 구문은 unverified로 남긴다. `file-code`는 모델이 프로그램과 테스트를
+실제 실행한 shell 증거를 요구하며, `web-search`는 검색과 공식 URL 본문 조회를 각각
+확인한다. controller의 독립 재실행은 보강 증거일 뿐 모델의 native 실행을 대신하지
+않는다. live shell/PTY/persistent terminal이 남으면 해당 case는 cleanup 미확인으로
+실패/보류한다.
 
 | 시나리오 | 필요한 증거 |
 |---|---|

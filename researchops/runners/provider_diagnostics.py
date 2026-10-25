@@ -13,6 +13,8 @@ def agy_error_diagnostic(result):
     if result.get("status") == "SUCCESS" and not result.get("error"):
         return None
     error = result.get("error")
+    if error == "Verification Required":
+        return {"code": "account_verification_required"}
     if isinstance(error, str) and len(error) <= 16384 and error.startswith(_QUOTA_PREFIXES):
         diagnostic = {"code": "quota_exhausted"}
         reset = _RESET.search(error)

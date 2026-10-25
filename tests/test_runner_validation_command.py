@@ -23,7 +23,7 @@ class TestRunnerValidationCommand(unittest.TestCase):
                 patch("smtplib.SMTP", side_effect=AssertionError("No SMTP")), \
                 patch("smtplib.SMTP_SSL", side_effect=AssertionError("No SMTP")):
             report = validate_runners(output_parent=directory)
-            self.assertEqual(report["totals"], {"passed": 4, "failed": 0, "blocked": 8}, report["cases"])
+            self.assertEqual(report["totals"], {"passed": 4, "failed": 0, "blocked": 12}, report["cases"])
             self.assertEqual(report["exit_code"], 78)
             self.assertEqual(report["model_invocations"], 0)
             self.assertFalse(report["operator_config_loaded"])

@@ -32,6 +32,14 @@ class TestConfigSecurity(unittest.TestCase):
         self.assertTrue(settings.web.csrf_protection)
         self.assertEqual(settings.runner.global_concurrency, 2)
 
+    def test_opencode_binary_and_default_engine_are_explicit(self):
+        settings = self.load({"runner": {"opencode_binary": "/opt/opencode/bin/opencode",
+                                         "default_type": "opencode_exec"}})
+        self.assertEqual(settings.runner.opencode_binary, "/opt/opencode/bin/opencode")
+        self.assertEqual(settings.runner.default_type, "opencode_exec")
+        with self.assertRaises(ConfigError):
+            self.load({"runner": {"opencode_binary": ""}})
+
     def test_string_booleans_and_bad_numbers_fail(self):
         for data in ({"delivery": {"global_handoff_kill_switch": "false"}},
                      {"runner": {"global_concurrency": True}},

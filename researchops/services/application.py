@@ -75,6 +75,8 @@ class ApplicationService:
             self.delivery_repo, self.state_repo, self.orchestrator, model_catalog=self.model_catalog
         )
         self.workspaces = WorkspaceService(self.settings, self.workspace_mgr, self.state_repo)
+        from researchops.services.image_generation import ImageGenerationService
+        self.image_generation = ImageGenerationService(self.settings)
         self.delivery = DeliveryService(
             self.settings, self.delivery_repo, self.state_repo,
             self.handoff_publisher, self.receipt_consumer,

@@ -52,9 +52,11 @@ docs/DECISIONS.md
 docs/EMAIL_RETRY.md
 docs/HARDENING.md
 docs/HTTP_PROXY_ROUTING.md
+docs/IMAGE_GENERATION.md
 docs/LARGE_TRACE_AND_RECIPIENT_ROUTING.md
 docs/MCP_INTEGRATION_PLAN.md
 docs/MEDIA_ARTIFACTS.md
+docs/OPENCODE_RUNNER.md
 docs/PRODUCTION_OPERATIONS.md
 docs/README.md
 docs/RESEARCH_CONTEXT_AND_HISTORY.md
@@ -206,10 +208,12 @@ researchops/runners/development_runner.py
 researchops/runners/fake.py
 researchops/runners/file_acquisition.py
 researchops/runners/http_routing.py
+researchops/runners/image_broker.py
 researchops/runners/image_generation.py
 researchops/runners/launcher.py
 researchops/runners/mcp_audit.py
 researchops/runners/native_mcp.py
+researchops/runners/opencode.py
 researchops/runners/probe.py
 researchops/runners/production.py
 researchops/runners/production_trace.py
@@ -230,6 +234,7 @@ researchops/services/auth_service.py
 researchops/services/catalog_service.py
 researchops/services/delivery_service.py
 researchops/services/doctor.py
+researchops/services/image_generation.py
 researchops/services/model_catalog.py
 researchops/services/ownership.py
 researchops/services/prepared_delivery.py
@@ -359,6 +364,8 @@ tests/test_handoff_and_receipt.py
 tests/test_http_image_discovery.py
 tests/test_http_proxy.py
 tests/test_image_generation.py
+tests/test_image_generation_service.py
+tests/test_image_integration.py
 tests/test_mcp_audit.py
 tests/test_mcp_diagnostics.py
 tests/test_media_config.py
@@ -367,6 +374,7 @@ tests/test_media_pipeline.py
 tests/test_message_validator.py
 tests/test_model_catalog.py
 tests/test_native_mcp.py
+tests/test_opencode_runner.py
 tests/test_operations.py
 tests/test_orchestrator.py
 tests/test_owned_delivery.py

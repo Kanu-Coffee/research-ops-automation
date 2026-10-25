@@ -121,7 +121,7 @@ class TestRunnerToolValidation(unittest.TestCase):
             code = main(["validate-runner-tools", "--output-parent", str(self.root), "--json"])
         report = json.loads(output.getvalue())
         self.assertEqual(code, 78)
-        self.assertEqual(report["totals"], {"passed": 0, "failed": 0, "blocked": 2 * len(SCENARIOS)})
+        self.assertEqual(report["totals"], {"passed": 0, "failed": 0, "blocked": 3 * len(SCENARIOS)})
         self.assertEqual(report["cli_invocations"], 0)
         self.assertEqual(report["model_invocations"], 0)
         self.assertEqual(report["upstream_request_count"], 0)

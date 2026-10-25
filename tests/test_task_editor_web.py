@@ -118,6 +118,17 @@ class TaskEditorWebTests(unittest.TestCase):
         self.assertIn("success=",response[1]["Location"])
         return fields
 
+    def test_image_engine_model_survive_create_edit_and_reload(self):
+        self.create(image_enabled="true", image_engine="openrouter",
+                    image_model="vendor/image-model")
+        editor = self.app.tasks.get_task_editor("operator-task")
+        self.assertEqual(editor["image_generation"],
+                         {"enabled": True, "engine": "openrouter", "model": "vendor/image-model"})
+        status, headers, body = self.request("GET", "/tasks/operator-task/edit")
+        self.assertEqual(status, 200)
+        self.assertIn(b'value="openrouter" selected', body)
+        self.assertIn(b'value="vendor/image-model"', body)
+
     def test_create_edit_keeps_distinct_files_id_history_and_detects_stale_editor(self):
         created = self.create()
         detail = self.request("GET","/tasks/operator-task")[2]

@@ -2,9 +2,9 @@
 
 ## 신뢰 모델
 
-Production은 신뢰된 내부 사용자가 작성한 Task를 native Codex/Antigravity CLI로 실행합니다. 조사에 사용하는 외부 문서는 근거 자료이며 추가 실행 권한을 부여하는 지시가 아닙니다. Task 실행 계정과 접근 가능한 host 자료를 운영자가 선택해야 합니다.
+Production은 신뢰된 내부 사용자가 작성한 Task를 native Codex/Antigravity CLI 또는 OpenCode v2 session API로 실행합니다. 조사에 사용하는 외부 문서는 근거 자료이며 추가 실행 권한을 부여하는 지시가 아닙니다. Task 실행 계정과 접근 가능한 host 자료를 운영자가 선택해야 합니다.
 
-Codex는 workspace-write, Antigravity는 호출별 도구 자동 승인과 sandbox 해제를 사용합니다. 파일 경로 분리·작업 지시·사후 감사가 같은 OS 계정의 host 접근을 강제로 격리하지는 않습니다. 전체 egress mediation, 비밀정보와 임의 코드의 강제 격리, 영구 디스크/inode quota, 비신뢰 tenant 격리는 완성되지 않았습니다. 불특정 사용자의 임의 Task를 실행하는 공개 서비스로 사용하지 않습니다.
+Codex는 workspace-write, Antigravity는 호출별 도구 자동 승인과 sandbox 해제, OpenCode는 호출별 session permissions와 task-local environment를 사용합니다. OpenCode의 control process는 기존 로그인을 사용하지만 worker session에는 provider token·server password·host HOME을 전달하지 않습니다. 파일 경로 분리·작업 지시·사후 감사가 같은 OS 계정의 host 접근을 강제로 격리하지는 않습니다. 전체 egress mediation, 비밀정보와 임의 코드의 강제 격리, 영구 디스크/inode quota, 비신뢰 tenant 격리는 완성되지 않았습니다. 불특정 사용자의 임의 Task를 실행하는 공개 서비스로 사용하지 않습니다.
 
 ## 적용하는 보호
 
