@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any, Optional
 
+from researchops.strict_json import strict_json_loads
 from researchops.config import Settings
 from researchops.domain.models import CompositionInput, ScheduledRun, TaskDefinition
 from researchops.errors import ConcurrencyError, HardGateError, RunnerError, ValidationError, WorkspaceError
@@ -22,6 +23,7 @@ from researchops.runners.base import BaseRunner, RunnerInvocationContext
 from researchops.runners.fake import FakeRunner
 from researchops.runners.codex import CodexRunner
 from researchops.runners.antigravity import AntigravityRunner
+from researchops.runners.opencode import OpenCodeRunner
 from researchops.workspace.security import read_safe_bytes
 from researchops.delivery.handoff import HandoffPublisher
 from researchops.delivery.system_alert import SystemAlertManager
@@ -57,10 +59,15 @@ class Orchestrator:
             return FakeRunner(fixtures_dir=bundled_path(self.settings.paths.repo_root, "examples/tasks/software-releases/fixtures"))
         if kind == "codex_exec":
             return CodexRunner(codex_binary=self.settings.runner.codex_binary,
-                               cgroup_root=self.settings.runner.cgroup_root)
+                               cgroup_root=self.settings.runner.cgroup_root,
+                               settings=self.settings)
         if kind == "antigravity_exec":
             return AntigravityRunner(antigravity_binary=self.settings.runner.antigravity_binary,
-                                     cgroup_root=self.settings.runner.cgroup_root)
+                                     cgroup_root=self.settings.runner.cgroup_root,
+                                     settings=self.settings)
+        if kind == "opencode_exec":
+            return OpenCodeRunner(opencode_binary=self.settings.runner.opencode_binary,
+                                  settings=self.settings)
         raise RunnerError(f"Unsupported runner: {kind}")
 
     def execute_run(self, run_id, force_dry_run=None, *, fencing_token=None, cancel_event=None):
@@ -207,6 +214,8 @@ class Orchestrator:
                 allow_http_requests=task.runner.get("allow_http_requests") is True,
                 http_proxy_profile=copy.deepcopy(http_profile) if stage == "research" else {},
                 resource_profile=task.runner.get("resource_profile", "standard-research"),
+                image_generation=copy.deepcopy(task.image_generation)
+                    if task.image_generation is not None else {},
                 fencing_token=fencing_token, cancellation_check=cancelled,
                 timezone=run.timezone, local_date=run.local_date,
                 local_date_display=run.local_date_display, scheduled_for=run.scheduled_for,
@@ -269,6 +278,7 @@ class Orchestrator:
                 code = result.exit_code
                 status = "timed_out" if code == 124 else "needs_attention" if code in (77, 78, 126) else "failed"
                 raise PolicyStop(status, result.error_message or f"{stage} worker failed ({code})")
+            return copy.deepcopy(result.image_ledger)
 
         try:
             guard()
@@ -283,7 +293,6 @@ class Orchestrator:
                 parent_archive = self.settings.paths.run_archive_dir / task.id / run.parent_run_id
                 parent_path = parent_archive / "research-context.json"
                 if parent_path.exists():
-                    from researchops.strict_json import strict_json_loads
                     parent_context = strict_json_loads(read_safe_bytes(parent_path, parent_archive, 64_000))
                     research_context = validate_reused_context(parent_context, task, run)
                     from researchops.engine.research_context import validate_retry_origin
@@ -524,17 +533,26 @@ class Orchestrator:
                 dest = cmp_dirs[2] / artifact["path"]
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 dest.write_bytes(artifact_sources[artifact["path"]])
+            image_ledger = None
             if delivery_only:
-                for name in ("composition-result.json", prepared_message.composition_result.html_path,
-                             prepared_message.composition_result.text_path):
+                for name, content in prepared_message.files.items():
                     destination = cmp_dirs[2] / name
                     destination.parent.mkdir(parents=True, exist_ok=True)
-                    destination.write_bytes(prepared_message.files[name])
+                    destination.write_bytes(content)
+                ledger_bytes = prepared_message.files.get(".image-ledger.json")
+                if ledger_bytes is not None:
+                    image_ledger = strict_json_loads(ledger_bytes)
             else:
-                invoke("compose", cmp_dirs)
+                image_ledger = invoke("compose", cmp_dirs)
+            ledger_path = cmp_dirs[2] / ".image-ledger.json"
+            if image_ledger is not None:
+                ledger_path.write_bytes(canonical_json(image_ledger))
+            else:
+                ledger_path.unlink(missing_ok=True)
             phase("validate_message")
             comp_result, _, _, hashes = self.message_validator.validate_composition(
-                cmp_dirs[2], comp_input, task, task_schema("composition_schema"))
+                cmp_dirs[2], comp_input, task, task_schema("composition_schema"),
+                image_ledger=image_ledger)
             if delivery_only and (comp_result.to_dict() != prepared_message.composition_result.to_dict() or
                     any(hashes[key] != prepared_message.hashes[key] for key in ("html", "text", "composition_result"))):
                 raise HardGateError("Prepared email changed while rebinding the delivery-only revision")
@@ -544,7 +562,8 @@ class Orchestrator:
             self.run_repo.save_composition_result(run_id, task.id, comp_result,
                 revision=comp_input.composition_revision, fencing_token=fencing_token,
                 recipient_resolution=hashes.get("recipient_resolution"),
-                composition_binding=hashes.get("composition_binding"))
+                composition_binding=hashes.get("composition_binding"),
+                compose_artifacts=hashes.get("compose_artifacts"))
             if hashes.get("composition_binding"):
                 archive.json("composition-binding.json", hashes["composition_binding"])
             if hashes.get("recipient_resolution"):
@@ -554,6 +573,17 @@ class Orchestrator:
             for artifact in comp_input.inline_artifacts + comp_input.attachments:
                 if not (archive.staging / artifact["path"]).exists():
                     archive.write(artifact["path"], artifact_sources[artifact["path"]])
+            extra_artifacts = (hashes.get("compose_artifacts") or
+                               hashes.get("composition_binding", {}).get("compose_artifacts") or [])
+            for art in extra_artifacts:
+                extra_path = art["path"]
+                if not (archive.staging / extra_path).exists() and (cmp_dirs[2] / extra_path).is_file():
+                    archive.write(extra_path, read_safe_bytes(cmp_dirs[2] / extra_path, cmp_dirs[2], self.settings.delivery.max_message_bytes))
+            for extra_path in (hashes.get("composition_binding", {}).get("files", {}) or {}):
+                if not (archive.staging / extra_path).exists() and (cmp_dirs[2] / extra_path).is_file():
+                    archive.write(extra_path, read_safe_bytes(cmp_dirs[2] / extra_path, cmp_dirs[2], self.settings.delivery.max_message_bytes))
+            if (cmp_dirs[2] / ".image-ledger.json").is_file() and not (archive.staging / ".image-ledger.json").exists():
+                archive.write(".image-ledger.json", read_safe_bytes(cmp_dirs[2] / ".image-ledger.json", cmp_dirs[2], self.settings.delivery.max_message_bytes))
             phase("handoff")
             handoff = self.handoff_publisher.create_and_publish_handoff(
                 task_def=task, run=run, comp_input=comp_input, comp_result=comp_result,

@@ -6,7 +6,8 @@ from researchops.runners.mcp_audit import safe_tool_timing
 from researchops.web.timeline_views import format_seoul, format_duration
 
 
-PROVIDERS = {"codex_exec": "Codex", "antigravity_exec": "Antigravity"}
+PROVIDERS = {"codex_exec": "Codex", "antigravity_exec": "Antigravity",
+             "opencode_exec": "OpenCode"}
 CALL_STATUSES = {"succeeded": "응답 확인", "failed": "도구 오류",
                  "denied": "권한 거절", "unverified": "응답 확인 안 됨"}
 CALL_ERRORS = {"MCP_TOOL_ERROR": "도구 실행 오류", "MCP_PROTOCOL_ERROR": "MCP 응답 오류",

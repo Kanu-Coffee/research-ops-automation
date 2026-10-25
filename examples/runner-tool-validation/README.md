@@ -15,9 +15,10 @@ uv run --frozen researchctl validate-runner-tools --live --runner codex_exec --s
 uv run --frozen researchctl validate-runner-tools --live --runner codex_exec --scenario mcp-research --timeout-seconds 180 --json
 uv run --frozen researchctl validate-runner-tools --live --runner codex_exec --scenario mcp-public-docs --timeout-seconds 180 --json
 uv run --frozen researchctl validate-runner-tools --live --runner codex_exec --scenario combined-research --timeout-seconds 180 --json
+uv run --frozen researchctl validate-runner-tools --live --runner opencode_exec --scenario file-code --timeout-seconds 240 --json
 ```
 
-`--runner antigravity_exec`도 provider 선택값이다. 명령을 받아들인다는 사실은 모든 시나리오가 그 provider에서 통과한다는 뜻이 아니다. native 명령·MCP 권한 거부가 발생하면 별도 증거로 보존하며, 미승인 권한 우회나 성공한 다른 실행자로 조용히 대체하지 않는다.
+`--runner antigravity_exec`와 `--runner opencode_exec`도 provider 선택값이다. 명령을 받아들인다는 사실은 모든 시나리오가 그 provider에서 통과한다는 뜻이 아니다. native 명령·MCP 권한 거부가 발생하면 별도 증거로 보존하며, 미승인 권한 우회나 성공한 다른 실행자로 조용히 대체하지 않는다.
 
 Agy 도구 요청 자동 승인을 명시적으로 선택하는 시험:
 
@@ -32,6 +33,8 @@ uv run --frozen researchctl validate-runner-tools --live --runner antigravity_ex
 ```bash
 uv run --frozen researchctl validate-runner-tools --live --runner antigravity_exec --agy-dangerously-skip-permissions --agy-no-sandbox --scenario file-code --scenario code-repair --scenario combined-research --timeout-seconds 180 --json
 ```
+
+OpenCode는 `file-write`, `file-code`, `code-repair`, `web-search`를 지원하며 `mcp-research`·`mcp-public-docs`는 호출별 test MCP 주입 경로가 없어 blocked로 남긴다. OpenCode 시험은 기존 background service를 중지·재시작하지 않고, 소유 session만 interrupt한다.
 
 `--agy-no-sandbox`는 기본 off이다. `--live`·`--agy-dangerously-skip-permissions`·Antigravity 단독 선택과 `file-code`·`code-repair`·`combined-research` 중 하나 이상의 명시적 `--scenario`를 모두 요구한다. 시나리오 생략, 코드 외 시나리오, Codex·혼합 provider는 호출 전에 거절한다. 승인된 호출에만 `--sandbox=false`를 전달하고 지정 임시 workspace의 합성 코드에 대한 지원되는 native unsandboxed 실행을 요청할 수 있다. 요청 상태 false와 실제 적용 미확인(`null`)을 구분한다. 이 시험은 host 접근 격리의 검증이 아니며 전용 파일 도구 오류나 다른 미승인 동작의 포괄적 우회 경로가 아니다.
 

@@ -22,7 +22,8 @@ def build_production_package(*, task_id: str, name: str, instructions: str,
                              recipient_routing_mode: str = "legacy_ids",
                              stage_settings: Optional[dict] = None,
                              recipient_visibility: str = "to",
-                             allow_http_requests: bool = False) -> Dict[str, str]:
+                             allow_http_requests: bool = False,
+                             image_generation: Optional[dict] = None) -> Dict[str, str]:
     if not isinstance(name, str) or not name.strip() or len(name) > 200:
         raise ValidationError("Task name must contain 1–200 characters")
     if not isinstance(instructions, str) or not instructions.strip() or len(instructions) > 100_000:
@@ -30,8 +31,8 @@ def build_production_package(*, task_id: str, name: str, instructions: str,
     for label, text in (("task.md", task_md), ("email_spec.md", email_spec_md)):
         if text is not None and (not isinstance(text, str) or not text.strip() or len(text) > 100_000):
             raise ValidationError(f"{label} must contain 1–100000 characters")
-    if runner_type not in {"codex_exec", "antigravity_exec"}:
-        raise ValidationError("Production tasks require Codex or Antigravity")
+    if runner_type not in {"codex_exec", "antigravity_exec", "opencode_exec"}:
+        raise ValidationError("Production tasks require Codex, Antigravity or OpenCode")
     if recipient_routing_mode not in {"legacy_ids", "catalog_name"}:
         raise ValidationError("Unknown recipient routing mode")
     if recipient_visibility not in {"to", "bcc"}:
@@ -40,7 +41,17 @@ def build_production_package(*, task_id: str, name: str, instructions: str,
         raise ValidationError("Schedule enablement must be a boolean")
     if type(allow_http_requests) is not bool:
         raise ValidationError("Worker HTTP access must be a boolean")
-    if allow_http_requests and runner_type not in {"codex_exec", "antigravity_exec"}:
+    if image_generation is None:
+        image_generation = {"enabled": True, "engine": "codex", "model": None}
+    if (not isinstance(image_generation, dict)
+            or set(image_generation) != {"enabled", "engine", "model"}
+            or type(image_generation["enabled"]) is not bool
+            or image_generation["engine"] not in {"codex", "opencode", "bailian", "openrouter"}
+            or (image_generation["model"] is not None
+                and (not isinstance(image_generation["model"], str) or not 1 <= len(image_generation["model"]) <= 200
+                     or any(c in image_generation["model"] for c in "\r\n\x00")))):
+        raise ValidationError("Invalid image generation settings")
+    if allow_http_requests and runner_type not in {"codex_exec", "antigravity_exec", "opencode_exec"}:
         raise ValidationError("Worker HTTP access requires a native production runner")
     if model is not None and (not isinstance(model, str) or len(model) > 200 or
                               any(c in model for c in "\r\n\x00")):
@@ -65,6 +76,7 @@ def build_production_package(*, task_id: str, name: str, instructions: str,
                    "composition_record_schema": "composition-record.schema.json",
                    "composition_schema": "composition.schema.json",
                    "html_path": "email.html", "text_path": "email.txt"},
+        "image_generation": dict(image_generation),
         "delivery": {"message_type": "research_digest", "mode": "handoff",
                      "sender_profile_id": sender_profile_id,
                      "allowed_recipient_group_ids": [recipient_group_id], "send_on_empty": True,

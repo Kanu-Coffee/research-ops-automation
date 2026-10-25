@@ -26,6 +26,7 @@ class DoctorService:
             "schemas": self._check_schemas(),
             "runners": self._check_runners(),
             "mcp": self._check_mcp(),
+            "image_services": self._check_image_services(),
             "runtime_security": self._check_runtime_security(),
             "timezone": {"ok": self.settings.timezone == "Asia/Seoul", "value": self.settings.timezone},
             "overall_status": "ok"
@@ -50,6 +51,21 @@ class DoctorService:
         return results
 
     run_doctor = check_all
+
+    def _check_image_services(self) -> Dict[str, Any]:
+        img_cfg = getattr(self.settings, "image_services", None)
+        key_configured = False
+        key_file_path = None
+        if img_cfg and getattr(img_cfg, "openrouter_api_key_file", None):
+            key_file = Path(img_cfg.openrouter_api_key_file)
+            key_configured = key_file.is_file() and not key_file.is_symlink()
+            key_file_path = str(key_file)
+        return {
+            "ok": True,
+            "openrouter_key_configured": key_configured,
+            "openrouter_key_file": key_file_path,
+            "supported_engines": ["codex", "opencode", "bailian", "openrouter"],
+        }
 
     def _check_db(self) -> Dict[str, Any]:
         try:
@@ -112,6 +128,7 @@ class DoctorService:
         probe = RunnerCapabilityProbe(
             codex_binary=self.settings.runner.codex_binary,
             antigravity_binary=self.settings.runner.antigravity_binary,
+            opencode_binary=self.settings.runner.opencode_binary,
             cgroup_root=self.settings.runner.cgroup_root,
             trusted_operator=self.settings.environment == "production",
         )
@@ -172,7 +189,8 @@ class DoctorService:
 
         providers = {}
         for provider, binary in (("codex_exec", self.settings.runner.codex_binary),
-                                 ("antigravity_exec", self.settings.runner.antigravity_binary)):
+                                 ("antigravity_exec", self.settings.runner.antigravity_binary),
+                                 ("opencode_exec", self.settings.runner.opencode_binary)):
             if not shutil.which(binary):
                 providers[provider] = {"provider": provider, "servers": [],
                     "config_sources": [], "issues": [{"code": "cli_unavailable"}],

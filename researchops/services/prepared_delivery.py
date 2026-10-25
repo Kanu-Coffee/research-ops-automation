@@ -134,8 +134,12 @@ def _load_prepared_message(settings, task_repo, run_repo, delivery_repo, run_id,
     read("composition-result.json", 1_000_000)
     read(result.html_path)
     read(result.text_path)
-    for artifact in comp_input.inline_artifacts + comp_input.attachments:
+    extra_artifacts = ((result_record.get("composition_binding") or {}).get("compose_artifacts") or
+                       result_record.get("compose_artifacts") or [])
+    for artifact in comp_input.inline_artifacts + comp_input.attachments + extra_artifacts:
         read(artifact["path"])
+    if ".image-ledger.json" in inventory:
+        read(".image-ledger.json")
     if read("result.json", 20_000_000) != research.raw_json.encode("utf-8"):
         raise ValidationError("PREPARED_MESSAGE_RESEARCH_HASH_MISMATCH")
     for name, value in (("artifact-report.json", comp_input.artifact_report if comp_input.schema_version == 4 else None),
@@ -148,7 +152,9 @@ def _load_prepared_message(settings, task_repo, run_repo, delivery_repo, run_id,
     schema_name = version.definition.output.get("composition_schema")
     task_schema = strict_json_loads(version.package_files[schema_name]) if schema_name in version.package_files else None
     validated, _, _, hashes = MessageValidator(settings.paths.schemas_dir, settings.delivery.max_message_bytes).validate_composition(
-        root, comp_input, version.definition, task_schema)
+        root, comp_input, version.definition, task_schema,
+        image_ledger=(strict_json_loads(files[".image-ledger.json"])
+                      if ".image-ledger.json" in files else None))
     if validated.to_dict() != result.to_dict():
         raise ValidationError("PREPARED_MESSAGE_RESULT_CHANGED")
     for key in ("composition_binding", "recipient_resolution"):

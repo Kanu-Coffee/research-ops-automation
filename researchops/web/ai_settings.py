@@ -6,7 +6,8 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 
-PROVIDERS = {"codex_exec": "Codex", "antigravity_exec": "Antigravity (Agy)"}
+PROVIDERS = {"codex_exec": "Codex", "antigravity_exec": "Antigravity (Agy)",
+             "opencode_exec": "OpenCode"}
 STAGES = {"research": "Research · 조사", "compose": "Compose · 메일 작성"}
 
 
@@ -78,7 +79,15 @@ def _stage_card(stage, setting, catalog, prefix, *, reused=False):
         provider_options.append((kind, kind + " · 기존 설정"))
     models = provider.get("models", [])
     model_options = [("", "CLI 기본 모델")]
-    model_options += [(item["id"], item.get("label", item["id"])) for item in models]
+    for item in models:
+        lbl = item.get("label", item["id"])
+        if kind == "opencode_exec" and "/" in item["id"]:
+            p_id, _, c_id = item["id"].partition("/")
+            sfx = f"{p_id} · {c_id}"
+            if not (lbl.endswith(f" · {sfx}") or f" · {p_id} · " in lbl or lbl == sfx):
+                room = 160 - len(sfx) - 3
+                lbl = f"{lbl[:room]} · {sfx}" if room >= 1 else sfx[:160]
+        model_options.append((item["id"], lbl))
     known = next((item for item in models if item["id"] == model), None)
     legacy = bool(model and known is None)
     if legacy:
@@ -156,8 +165,8 @@ def render_ai_controls(settings, catalog=None, *, prefix="task-ai", mode="task",
     </section>{AI_STYLE}{AI_SCRIPT}'''
 
 
-def render_execution_history(settings, plan=None):
-    if not settings:
+def render_execution_history(settings, plan=None, image_settings=None):
+    if not settings and not image_settings:
         return ""
     plan = plan or {}
     rows = ""
@@ -167,6 +176,17 @@ def render_execution_history(settings, plan=None):
         rows += f'''<tr><th scope="row">{label}{' · 기존 결과 재사용' if reused else ''}</th>
           <td>{_e(PROVIDERS.get(value.get('type'), value.get('type') or '미기록'))}</td>
           <td>{_e(value.get('model') or 'CLI 기본 모델')}</td><td>{_e(value.get('reasoning_effort') or '모델 기본값')}</td></tr>'''
+    img_conf = image_settings or settings.get("image_generation")
+    if img_conf and isinstance(img_conf, dict):
+        img_enabled = img_conf.get("enabled", True)
+        engine_label = {"codex": "Codex native imagegen", "opencode": "OpenCode",
+                        "bailian": "Bailian", "openrouter": "OpenRouter"}.get(
+                            img_conf.get("engine", "codex"), img_conf.get("engine", "codex"))
+        model_display = img_conf.get("model") or "엔진 기본값"
+        rows += f'''<tr><th scope="row">이미지 생성</th>
+          <td>{_e(engine_label if img_enabled else "사용 안 함")}</td>
+          <td>{_e(model_display if img_enabled else "-")}</td>
+          <td>{'활성' if img_enabled else '비활성'}</td></tr>'''
     return f'''<section class="card" aria-labelledby="run-ai-history"><h2 id="run-ai-history" class="card-title">이 실행의 AI 설정 · 변경 불가</h2>
       <p class="form-help">실행 당시 저장된 설정입니다. 아래 재실행 설정은 새로운 Run에 적용됩니다.</p>
       <div style="overflow-x:auto;"><table class="data-table"><thead><tr><th scope="col">단계</th><th scope="col">AI 엔진</th><th scope="col">모델</th><th scope="col">사고 수준</th></tr></thead><tbody>{rows}</tbody></table></div></section>'''
@@ -243,7 +263,18 @@ window.researchopsInitAISettings = () => {
       if (![...p.options].some(option => option.value === value.type)) p.add(new Option(value.type+' · 기존 저장값',value.type));
       p.value = value.type;
       const models = provider(value.type).models || [], known = models.find(item => item.id === value.model);
-      const modelOptions = [['','CLI 기본 모델'],...models.map(item => [item.id,item.label || item.id])];
+      const formatModelLabel = (item, type) => {
+        let lbl = item.label || item.id;
+        if (type === 'opencode_exec' && item.id.includes('/')) {
+          const [p, ...rest] = item.id.split('/');
+          const sfx = p + ' · ' + rest.join('/');
+          if (!lbl.endsWith(' · ' + sfx) && !lbl.includes(' · ' + p + ' · ') && lbl !== sfx) {
+            lbl = lbl + ' · ' + sfx;
+          }
+        }
+        return lbl;
+      };
+      const modelOptions = [['','CLI 기본 모델'],...models.map(item => [item.id, formatModelLabel(item, value.type)])];
       if (value.model && !known) modelOptions.push([value.model,value.model+' · 기존 저장값 (목록 미확인)']);
       replaceOptions(field(stage,'model'),modelOptions,value.model);
       const efforts = [['',known?.family ? '사고 수준 선택' : '모델 기본값'],...(known?.efforts || []).filter(item => item.value).map(item => [item.value,item.label || item.value])];

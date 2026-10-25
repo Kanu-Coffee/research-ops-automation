@@ -148,7 +148,7 @@ class MessageValidator:
         return json.loads((self.schemas_dir / "composition-result.schema.json").read_text(encoding="utf-8"))
 
     def validate_composition(self, compose_output_dir: Path, comp_input: CompositionInput,
-                             task_def: TaskDefinition, task_composition_schema=None):
+                             task_def: TaskDefinition, task_composition_schema=None, *, image_ledger=None):
         errors, warnings = [], []
         root = compose_output_dir
         if comp_input.schema_version == 4:
@@ -221,14 +221,98 @@ class MessageValidator:
             errors.append("HTML record markers do not match composition input exactly")
         if parser.local_dates != {comp_input.run["local_date"]} or sum(parser.date_counts.values()) != 1:
             errors.append("HTML canonical local-date marker does not match Asia/Seoul business date")
-        artifacts = comp_input.inline_artifacts + comp_input.attachments
+        artifacts = list(comp_input.inline_artifacts) + list(comp_input.attachments)
         declared = [art["cid"] for art in comp_input.inline_artifacts]
+        new_compose_inlines = []
+        task_image = getattr(task_def, "image_generation", None) if task_def else None
+        if isinstance(task_def, dict):
+            task_image = task_def.get("image_generation")
+        image_gen_enabled = isinstance(task_image, dict) and task_image.get("enabled") is True
+        undeclared_cids = sorted(parser.cids_found - set(declared))
+        if undeclared_cids and image_gen_enabled:
+            # Only the controller/validated archive supplies this argument. Worker
+            # files with ledger-like names are never an authority.
+            ledger = image_ledger
+            expected_engine = task_image.get("engine", "codex")
+            expected_model = task_image.get("model")
+            if not (isinstance(ledger, dict) and ledger.get("schema_version") == 1
+                    and ledger.get("status") == "available"
+                    and isinstance(ledger.get("jobs"), list)
+                    and ledger.get("engine") == expected_engine):
+                ledger = None
+            if (ledger is not None and expected_model not in (None, "default", "native")
+                    and ledger.get("model") != expected_model):
+                ledger = None
+
+            if ledger is not None:
+                ledger_images = []
+                for job in ledger.get("jobs", []):
+                    if isinstance(job, dict) and job.get("status") == "available":
+                        job_engine = job.get("engine", ledger.get("engine"))
+                        job_model = job.get("model", ledger.get("model"))
+                        if expected_engine and (not job_engine or expected_engine != job_engine):
+                            continue
+                        if expected_model and expected_model not in ("default", "native"):
+                            if not job_model or expected_model != job_model:
+                                continue
+                        for img in job.get("images", []):
+                            if isinstance(img, dict):
+                                ledger_images.append({
+                                    "filename": img.get("filename"),
+                                    "sha256": img.get("sha256"),
+                                    "size_bytes": img.get("size_bytes"),
+                                    "mime_type": img.get("mime_type"),
+                                    "engine": job_engine,
+                                    "model": job_model,
+                                    "observed_model": img.get("observed_model"),
+                                    "model_verified": img.get("model_verified", False),
+                                })
+
+                for cid in undeclared_cids:
+                    for ext in (".png", ".jpg", ".jpeg", ""):
+                        candidate = root / (cid + ext) if ext else root / cid
+                        if candidate.is_file() and not candidate.is_symlink():
+                            try:
+                                raw = read_safe_bytes(candidate, root, self.max_message_bytes)
+                                mime_type = "image/png" if raw.startswith(b"\x89PNG\r\n\x1a\n") else "image/jpeg" if raw.startswith(b"\xff\xd8\xff") else None
+                                if mime_type:
+                                    validate_media(raw, mime_type)
+                                    digest = hashlib.sha256(raw).hexdigest()
+                                    matched_entry = None
+                                    for entry in ledger_images:
+                                        if (entry.get("sha256") == digest and
+                                                entry.get("size_bytes") == len(raw) and
+                                                entry.get("mime_type") == mime_type and
+                                                (not entry.get("filename") or entry.get("filename") == candidate.name)):
+                                            matched_entry = entry
+                                            break
+                                    if matched_entry is not None:
+                                        extra = {
+                                            "artifact_id": f"compose-{digest[:16]}",
+                                            "path": candidate.name,
+                                            "mime_type": mime_type,
+                                            "sha256": digest,
+                                            "size_bytes": len(raw),
+                                            "record_ids": list(parser.cid_record_ids.get(cid, [])),
+                                            "cid": cid,
+                                            "role": "inline_image",
+                                            "engine": matched_entry.get("engine"),
+                                            "model": matched_entry.get("model"),
+                                            "observed_model": matched_entry.get("observed_model"),
+                                            "model_verified": matched_entry.get("model_verified", False),
+                                        }
+                                        new_compose_inlines.append(extra)
+                                        declared.append(cid)
+                                        artifacts.append(extra)
+                                        break
+                            except Exception:
+                                pass
         if (len(declared) != len(set(declared)) or parser.cids_found != set(declared) or
                 any(count != 1 for count in parser.cid_counts.values()) or
-                any(not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._@+-]*",cid) for cid in declared)):
+                any(not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._@+-]*", cid) for cid in declared)):
             errors.append("HTML CID references must match declared inline artifacts")
         if comp_input.schema_version == 4:
-            for artifact in comp_input.inline_artifacts:
+            for artifact in comp_input.inline_artifacts + new_compose_inlines:
                 if (len(artifact["record_ids"]) == 1 and
                         parser.cid_record_ids.get(artifact["cid"], set()) != set(artifact["record_ids"])):
                     errors.append("Inline artifact CID must occur inside its associated record region")
@@ -264,9 +348,11 @@ class MessageValidator:
                   "composition_result": hashlib.sha256(result_bytes).hexdigest(), "warnings": warnings}
         if routing_mode(task_def) == "catalog_name":
             hashes["recipient_resolution"] = recipient_resolution(data, comp_input, task_def, result_bytes)
+        if new_compose_inlines:
+            hashes["compose_artifacts"] = new_compose_inlines
         if comp_input.schema_version == 4:
             from researchops.delivery.artifact_integrity import composition_binding
-            hashes["composition_binding"] = composition_binding(comp_input, result_bytes, file_evidence)
+            hashes["composition_binding"] = composition_binding(comp_input, result_bytes, file_evidence, compose_artifacts=new_compose_inlines)
         result = CompositionResult(recipient_group_id=selected_group_id, **{key: data[key] for key in (
             "recipient_group_reason", "subject", "html_path", "text_path", "included_record_ids")})
         return result, html_content, text_content, hashes

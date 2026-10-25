@@ -53,6 +53,16 @@ def task_editor_body(values: dict | None = None, *, mode: str = "create", recipi
              f'<input type="hidden" name="expected_updated_at" value="{_e(value.get("expected_updated_at", ""))}">') if editing else ""
     schedule_enabled = value.get("schedule_enabled", False) in (True, "true")
     http_allowed = value.get("allow_http_requests", False) in (True, "true")
+    image = value.get("image_generation") or {"enabled": True, "engine": "codex", "model": None}
+    if not isinstance(image, dict):
+        image = {"enabled": True, "engine": "codex", "model": None}
+    image_enabled = image.get("enabled", True) in (True, "true")
+    image_engine = image.get("engine", "codex")
+    image_model = image.get("model") or ""
+    image_engine_options = {"codex": "Codex native imagegen", "opencode": "OpenCode",
+                            "bailian": "Bailian", "openrouter": "OpenRouter"}
+    if image_engine not in image_engine_options:
+        image_engine_options[image_engine] = image_engine + " · 기존 설정"
     launch_mode = value.get("launch_mode") or ("run" if value.get("action") == "create_and_run" else "save")
     multi_note = ('<p class="form-help">기존 복수 그룹 규칙 유지: '
                   + _e(", ".join(value.get("recipient_group_ids", []))) + '</p>') if len(value.get("recipient_group_ids", [])) > 1 else ""
@@ -123,6 +133,27 @@ def task_editor_body(values: dict | None = None, *, mode: str = "create", recipi
           <div class="form-group"><label class="editor-toggle"><input type="checkbox" name="allow_http_requests" value="true" {'checked' if http_allowed else ''}> Worker HTTP 조회 허용</label>
             <p class="form-help">조사 중 공개 웹·JSON 조회와 파일 다운로드를 허용합니다. 외부 데이터 변경은 허용하지 않습니다.</p></div>
           {render_ai_controls(stage_settings(value), model_catalog)}
+          <fieldset class="editor-image-generation" id="image-generation-editor"><legend>이미지 생성</legend>
+            <label class="editor-toggle"><input type="checkbox" name="image_enabled" value="true" {'checked' if image_enabled else ''}> Research/Compose 요청 시 이미지 생성 허용</label>
+            <p class="form-help">Research/Compose LLM 선택과 별개입니다. 지원 엔진: Codex native, OpenCode, Bailian, OpenRouter API.</p>
+            <div class="responsive-grid">
+              <div class="form-group"><label class="form-label" for="image-engine">이미지 엔진</label>
+                <select id="image-engine" name="image_engine" class="form-select">{_options(image_engine_options, image_engine)}</select></div>
+              <div class="form-group"><label class="form-label" for="image-model">이미지 모델</label>
+                <input id="image-model" name="image_model" class="form-input" maxlength="200" value="{_e(image_model)}" placeholder="엔진 기본값 또는 지원 모델" list="image-model-datalist">
+                <datalist id="image-model-datalist">
+                  <option value="native">Codex / OpenCode 기본 native</option>
+                  <option value="gpt-image-1">Codex GPT Image 1</option>
+                  <option value="dall-e-3">OpenCode DALL-E 3</option>
+                  <option value="wanx-v1">Bailian Wanx v1</option>
+                  <option value="wanx-2.1-t2i-turbo">Bailian Wanx 2.1 Turbo</option>
+                  <option value="black-forest-labs/flux-1.1-pro">OpenRouter FLUX 1.1 Pro</option>
+                  <option value="black-forest-labs/flux-1-schnell">OpenRouter FLUX 1 Schnell</option>
+                  <option value="recraft/recraft-v3">OpenRouter Recraft v3</option>
+                  <option value="stabilityai/stable-diffusion-3.5-large">OpenRouter SD 3.5 Large</option>
+                </datalist></div>
+            </div>
+            <p class="form-help">저장만으로 생성하지 않습니다. 모델 목록은 후보이며 사용 권한은 엔진 설정에 따릅니다. Codex/OpenCode 모델 지정은 도구 지시이며 실제 사용 모델은 미검증일 수 있습니다. OpenRouter API 키는 보호된 앱 설정 파일에서 관리합니다.</p></fieldset>
           <fieldset class="editor-schedule" id="schedule-editor"><legend>반복 일정 · 서울 시간</legend>{schedule_toggle}
             <div class="responsive-grid">
               <div class="form-group"><label class="form-label" for="schedule-preset">반복 주기</label><select id="schedule-preset" name="schedule_preset" class="form-select">{_options(PRESETS,schedule['schedule_preset'])}</select></div>

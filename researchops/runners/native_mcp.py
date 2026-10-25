@@ -36,7 +36,8 @@ _APPROVAL_MODES = {"auto", "prompt", "writes", "approve"}
 
 def _provider(provider):
     aliases = {"codex": "codex_exec", "codex_exec": "codex_exec",
-               "antigravity": "antigravity_exec", "antigravity_exec": "antigravity_exec"}
+               "antigravity": "antigravity_exec", "antigravity_exec": "antigravity_exec",
+               "opencode": "opencode_exec", "opencode_exec": "opencode_exec"}
     if provider not in aliases:
         raise ValueError("Unsupported native MCP provider")
     return aliases[provider]
@@ -237,6 +238,22 @@ def _inventory(provider, binary, project_dir, environ):
     try:
         home = _home(environ)
         path = _production_path(binary, home)
+        if provider == "opencode_exec":
+            # OpenCode owns its JSON/JSONC configuration and authentication
+            # store. This inspector does not parse that configuration (it can
+            # contain provider headers), does not start a server, and does not
+            # claim a connection. The runner records the CLI's separate
+            # connected/failed summary without exposing configuration values.
+            revision = hashlib.sha256(json.dumps({"provider": provider, "source": "opencode-native"},
+                                                 sort_keys=True).encode()).hexdigest()
+            return {"provider": provider,
+                    "config_sources": [{"scope": "user", "source": "<opencode-native>",
+                                        "status": "cli_owned"}],
+                    "servers": [], "issues": [], "connections_checked": False,
+                    "inventory_complete": False, "config_revision": revision,
+                    "limitations": ["OpenCode resolves project/user configuration and authentication natively.",
+                                    "Configuration contents, headers and credential stores are not read or exposed.",
+                                    "The runner records `opencode mcp list` status names separately from this inventory."]}, set()
         if provider == "codex_exec":
             root = _absolute_path(environ.get("CODEX_HOME", str(home / ".codex")))
             definitions = [(root / "config.toml", "<CODEX_HOME>/config.toml", "user", "toml")]

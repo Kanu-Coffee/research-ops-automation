@@ -5,6 +5,6 @@ from researchops.runners.production import TrustedProductionRunner
 
 
 class CodexRunner(TrustedProductionRunner):
-    def __init__(self, codex_binary: str = "codex", *, cgroup_root: Path | None = None):
+    def __init__(self, codex_binary: str = "codex", *, cgroup_root: Path | None = None, settings=None):
         self.codex_binary = codex_binary
-        super().__init__("codex_exec", codex_binary, cgroup_root=cgroup_root)
+        super().__init__("codex_exec", codex_binary, cgroup_root=cgroup_root, settings=settings)

@@ -11,6 +11,7 @@ from unittest.mock import patch
 from researchops.errors import ValidationError
 from researchops.services.model_catalog import (
     ModelCatalogService, _codex_models, normalize_agy_models, normalize_codex_models,
+    normalize_opencode_models, normalize_opencode_text,
 )
 
 
@@ -18,11 +19,26 @@ CODEX_MODELS = [{"model": "unit-model", "displayName": "Unit Model", "hidden": F
     "defaultReasoningEffort": "medium", "supportedReasoningEfforts": [
         {"reasoningEffort": name, "description": "not copied"} for name in ("low", "medium", "high", "max", "ultra")]}]
 AGY_MODELS = b"Fetching available models...\ngemini-test-high\tGemini Test (High)\ngemini-test-low\tGemini Test (Low)\nclaude-test\tClaude Test\ngpt-test-medium\tGPT Test (Medium)\n"
+OPENCODE_MODELS = [
+    {"id": "model-one", "modelID": "model-one", "providerID": "provider-one",
+     "name": "Provider One Model", "enabled": True,
+     "variants": [{"id": "low", "settings": {"secret": "not-copied"}}, {"id": "high"}]},
+    {"id": "nested/model", "modelID": "nested/model", "providerID": "openrouter",
+     "name": "Nested Model", "enabled": True, "variants": []},
+    {"id": "friendly-alias", "modelID": "upstream-model", "providerID": "provider-one",
+     "name": "Alias Model", "enabled": True, "variants": [{"id": "low"}]},
+    {"id": "second-alias", "modelID": "upstream-model", "providerID": "provider-one",
+     "name": "Second Alias", "enabled": True, "variants": []},
+    {"id": "disabled", "modelID": "disabled", "providerID": "provider-one",
+     "name": "Disabled", "enabled": False, "variants": []},
+]
+OPENCODE_TEXT = b"provider-one/model-one\nopenrouter/nested/model\n"
 
 
 def settings(root, environment="development"):
     return SimpleNamespace(environment=environment, paths=SimpleNamespace(data_dir=root),
-        runner=SimpleNamespace(codex_binary="codex", antigravity_binary="agy"))
+        runner=SimpleNamespace(codex_binary="codex", antigravity_binary="agy",
+                               opencode_binary="opencode"))
 
 
 def install_catalog(service):
@@ -31,7 +47,8 @@ def install_catalog(service):
          "fetched_at": datetime.now(timezone.utc).isoformat(), "models": models, "error_code": None}
         for kind, label, source, models in (
             ("codex_exec", "Codex", "codex_model_list", normalize_codex_models(CODEX_MODELS)),
-            ("antigravity_exec", "Antigravity (Agy)", "agy_models", normalize_agy_models(AGY_MODELS)))]}
+            ("antigravity_exec", "Antigravity (Agy)", "agy_models", normalize_agy_models(AGY_MODELS)),
+            ("opencode_exec", "OpenCode", "opencode_model_list", normalize_opencode_models(OPENCODE_MODELS)))]}
 
 
 class ModelCatalogTests(unittest.TestCase):
@@ -106,7 +123,7 @@ class ModelCatalogTests(unittest.TestCase):
         service._cache["checked_at"] = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
         with patch.object(service, "_discover", side_effect=ValueError("SECRET-CREDENTIAL")) as discover:
             result = service.snapshot(refresh=True)
-        self.assertEqual(discover.call_count, 2)
+        self.assertEqual(discover.call_count, 3)
         self.assertEqual(result["providers"][0]["status"], "stale")
         self.assertEqual(result["providers"][0]["models"][0]["id"], "unit-model")
         self.assertNotIn("SECRET", json.dumps(result))
@@ -121,7 +138,14 @@ class ModelCatalogTests(unittest.TestCase):
         install_catalog(service)
         before = service.snapshot()
         def discover(provider):
-            return (normalize_codex_models([{**CODEX_MODELS[0], "model": "new-model"}]), "codex_model_list", datetime.now(timezone.utc).isoformat()) if provider == "codex_exec" else (normalize_agy_models(AGY_MODELS), "agy_models", datetime.now(timezone.utc).isoformat())
+            if provider == "codex_exec":
+                return (normalize_codex_models([{**CODEX_MODELS[0], "model": "new-model"}]),
+                        "codex_model_list", datetime.now(timezone.utc).isoformat())
+            if provider == "antigravity_exec":
+                return (normalize_agy_models(AGY_MODELS), "agy_models",
+                        datetime.now(timezone.utc).isoformat())
+            return (normalize_opencode_models(OPENCODE_MODELS), "opencode_model_list",
+                    datetime.now(timezone.utc).isoformat())
         with patch.object(service, "_discover", side_effect=discover):
             after = service.snapshot(refresh=True)
         self.assertNotEqual(before["revision"], after["revision"])
@@ -136,6 +160,60 @@ class ModelCatalogTests(unittest.TestCase):
         result = ModelCatalogService(settings(self.root)).snapshot()
         self.assertNotIn("SECRET", json.dumps(result))
         self.assertEqual(result["providers"][0]["models"], [])
+
+    def test_opencode_nested_model_and_variant_are_exact_and_secret_free(self):
+        models = normalize_opencode_models(OPENCODE_MODELS)
+        self.assertEqual([model["id"] for model in models],
+                         ["provider-one/model-one", "openrouter/nested/model",
+                          "provider-one/friendly-alias", "provider-one/second-alias"])
+        self.assertEqual([effort["value"] for effort in models[0]["efforts"]],
+                         ["", "low", "high"])
+        self.assertEqual(models[0]["label"], "Provider One Model · provider-one · model-one")
+        self.assertEqual(models[2]["label"], "Alias Model · provider-one · friendly-alias")
+        self.assertNotIn("not-copied", json.dumps(models))
+        stage = {"type": "opencode_exec", "model": "provider-one/model-one",
+                 "reasoning_effort": "high"}
+        self.assertEqual(self.service.validate_stage(stage), stage)
+        nested = {"type": "opencode_exec", "model": "openrouter/nested/model",
+                  "reasoning_effort": None}
+        self.assertEqual(self.service.validate_stage(nested), nested)
+        alias = {"type": "opencode_exec", "model": "provider-one/friendly-alias",
+                 "reasoning_effort": "low"}
+        self.assertEqual(self.service.validate_stage(alias), alias)
+        with self.assertRaises(ValidationError):
+            self.service.validate_stage({**alias, "model": "provider-one/upstream-model",
+                                        "reasoning_effort": None})
+        with self.assertRaises(ValidationError):
+            self.service.validate_stage({**stage, "reasoning_effort": "max"})
+        with self.assertRaises(ValidationError):
+            self.service.validate_stage({**stage, "model": "provider-one/disabled"})
+
+    def test_opencode_text_fallback_keeps_ids_without_inventing_variants(self):
+        models = normalize_opencode_text(OPENCODE_TEXT)
+        self.assertEqual([model["id"] for model in models],
+                         ["provider-one/model-one", "openrouter/nested/model"])
+        self.assertEqual([[effort["value"] for effort in model["efforts"]] for model in models],
+                         [[""], [""]])
+        for raw in (b"no-provider\n", b"a/b\na/b\n", b"--bad\n"):
+            with self.subTest(raw=raw), self.assertRaises(ValueError):
+                normalize_opencode_text(raw)
+
+    def test_two_provider_cache_is_migrated_without_losing_verified_models(self):
+        legacy = {"version": 1, "checked_at": datetime.now(timezone.utc).isoformat(), "providers": [
+            {"type": "codex_exec", "label": "Codex", "status": "ready", "source": "codex_model_list",
+             "fetched_at": datetime.now(timezone.utc).isoformat(),
+             "models": normalize_codex_models(CODEX_MODELS), "error_code": None},
+            {"type": "antigravity_exec", "label": "Antigravity (Agy)", "status": "ready",
+             "source": "agy_models", "fetched_at": datetime.now(timezone.utc).isoformat(),
+             "models": normalize_agy_models(AGY_MODELS), "error_code": None}]}
+        path = self.root / "model-catalog"
+        path.mkdir()
+        (path / "snapshot.json").write_text(json.dumps(legacy), encoding="utf-8")
+        snapshot = ModelCatalogService(settings(self.root)).snapshot()
+        self.assertEqual([provider["type"] for provider in snapshot["providers"]],
+                         ["codex_exec", "antigravity_exec", "opencode_exec"])
+        self.assertEqual(snapshot["providers"][0]["models"][0]["id"], "unit-model")
+        self.assertEqual(snapshot["providers"][2]["status"], "unavailable")
 
     def test_cli_model_metadata_rejects_malformed_duplicate_or_oversized_ids(self):
         for raw in (b"not TSV\n", b"--option\tBad\n", b"a\tA\na\tA\n", b"a\tunsafe\x00value\n"):

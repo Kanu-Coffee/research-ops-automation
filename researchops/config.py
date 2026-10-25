@@ -33,6 +33,8 @@ class PathsConfig:
 class RunnerConfig:
     codex_binary: str = "codex"
     antigravity_binary: str = "agy"
+    opencode_binary: str = "opencode"
+    bailian_binary: str = "bl"
     default_type: str = "codex_exec"
     default_sandbox: str = "task-workspace"
     default_network_profile: str = "none"
@@ -166,6 +168,14 @@ def validate_web_bind(config: WebConfig, bind: str) -> None:
 
 
 @dataclass
+class ImageServicesConfig:
+    openrouter_api_key_file: Optional[Path] = None
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    openrouter_timeout_seconds: int = 120
+    max_image_bytes: int = 4 * 1024 * 1024
+
+
+@dataclass
 class Settings:
     environment: str = "development"
     timezone: str = "Asia/Seoul"
@@ -174,6 +184,7 @@ class Settings:
     delivery: DeliveryConfig = field(default_factory=DeliveryConfig)
     web: WebConfig = field(default_factory=WebConfig)
     media: MediaConfig = field(default_factory=MediaConfig)
+    image_services: ImageServicesConfig = field(default_factory=ImageServicesConfig)
     raw_config: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -219,7 +230,7 @@ def load_settings(config_path: Optional[str | Path] = None) -> Settings:
             raise ConfigError(f"Cannot load settings: {exc}") from exc
     if not isinstance(data, dict):
         raise ConfigError("Settings must be a mapping")
-    for section in ("paths", "runner", "delivery", "media", "web", "scheduler", "worker", "network_profiles", "resource_profiles"):
+    for section in ("paths", "runner", "delivery", "media", "web", "scheduler", "worker", "network_profiles", "resource_profiles", "image_services"):
         if section in data and not isinstance(data[section], dict):
             raise ConfigError(f"{section} must be a mapping")
     if data.get("timezone", "Asia/Seoul") != "Asia/Seoul":
@@ -290,14 +301,17 @@ def load_settings(config_path: Optional[str | Path] = None) -> Settings:
         raise ConfigError("Trusted schemas must be outside mutable task/runtime boundaries")
 
     runner_data = data.get("runner", {})
-    for binary_key in ("codex_binary", "antigravity_binary"):
-        value = runner_data.get(binary_key, "codex" if binary_key == "codex_binary" else "agy")
+    for binary_key, default in (("codex_binary", "codex"), ("antigravity_binary", "agy"),
+                                ("opencode_binary", "opencode"), ("bailian_binary", "bl")):
+        value = runner_data.get(binary_key, default)
         if not isinstance(value, str) or not value or "\x00" in value:
             raise ConfigError(f"runner.{binary_key} must be a nonempty executable name")
     runner = RunnerConfig(
         codex_binary=runner_data.get("codex_binary", "codex"),
         antigravity_binary=runner_data.get("antigravity_binary", "agy"),
-        default_type=enum("runner", "default_type", "codex_exec", {"codex_exec", "antigravity_exec", "fake"}),
+        opencode_binary=runner_data.get("opencode_binary", "opencode"),
+        bailian_binary=runner_data.get("bailian_binary", "bl"),
+        default_type=enum("runner", "default_type", "codex_exec", {"codex_exec", "antigravity_exec", "opencode_exec", "fake"}),
         default_sandbox=enum("runner", "default_sandbox", "task-workspace", {"task-workspace"}),
         default_network_profile=runner_data.get("default_network_profile", "none"),
         default_timeout_seconds=positive("runner", "default_timeout_seconds", 7200),
@@ -393,6 +407,24 @@ def load_settings(config_path: Optional[str | Path] = None) -> Settings:
         if any(boundary == token_path or boundary in token_path.parents for boundary in boundaries):
             raise ConfigError("Media credentials must be outside task/output boundaries")
         media.providers[name] = MediaProviderConfig(origin, token_path)
+    image_services_data = data.get("image_services", {})
+    image_services = ImageServicesConfig()
+    key_ref = image_services_data.get("openrouter_api_key_file")
+    if key_ref is not None:
+        if not isinstance(key_ref, str) or not Path(key_ref).is_absolute() or "\x00" in key_ref:
+            raise ConfigError("image_services.openrouter_api_key_file must be an absolute protected file")
+        key_path = Path(os.path.abspath(key_ref))
+        if any(boundary == key_path or boundary in key_path.parents for boundary in boundaries):
+            raise ConfigError("Image service credentials must be outside task/output boundaries")
+        image_services.openrouter_api_key_file = key_path
+    base_url = image_services_data.get("openrouter_base_url", "https://openrouter.ai/api/v1")
+    if not isinstance(base_url, str) or not base_url.startswith("https://") or base_url.endswith("/"):
+        raise ConfigError("image_services.openrouter_base_url must be an HTTPS base URL without trailing slash")
+    image_services.openrouter_base_url = base_url
+    image_services.openrouter_timeout_seconds = positive("image_services", "openrouter_timeout_seconds", 120)
+    image_services.max_image_bytes = positive("image_services", "max_image_bytes", 4 * 1024 * 1024)
+    if image_services.max_image_bytes > 20_000_000:
+        raise ConfigError("image_services.max_image_bytes exceeds 20 MB")
     web_data = data.get("web", {})
     web = WebConfig(enabled=boolean("web", "enabled", False),
                     allow_remote_proxy=boolean("web", "allow_remote_proxy", False),
@@ -435,6 +467,7 @@ def load_settings(config_path: Optional[str | Path] = None) -> Settings:
         delivery=delivery,
         web=web,
         media=media,
+        image_services=image_services,
         raw_config=data,
     )
 

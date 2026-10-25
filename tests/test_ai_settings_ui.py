@@ -70,6 +70,20 @@ class AiControlTests(unittest.TestCase):
         self.assertIn("Research 설정을 Compose에 복사", raw)
         self.assertNotIn("hidden", next(item for item in form.buttons if "data-ai-copy" in item))
         self.assertIn("메일·수신자", raw)
+        self.assertIn('name="image_engine"', raw)
+        self.assertIn('name="image_model"', raw)
+        self.assertIn('name="image_enabled"', raw)
+
+    def test_image_controls_preserve_selected_engine_and_model(self):
+        raw = task_editor_body({"image_generation": {"enabled": False, "engine": "openrouter",
+            "model": "vendor/image-model"}}, model_catalog=CATALOG,
+            recipient_groups={"team": ["recipient@example.test"]})
+        form = FormElements(raw)
+        self.assertEqual(form.selected("image_engine"), "openrouter")
+        image = next(item for item in form.inputs if item.get("name") == "image_model")
+        self.assertEqual(image["value"], "vendor/image-model")
+        self.assertNotIn("checked", next(item for item in form.inputs
+            if item.get("name") == "image_enabled"))
 
     def test_agy_variant_maps_to_family_without_inventing_a_default_effort(self):
         form = FormElements(render_ai_controls(STAGES, CATALOG))

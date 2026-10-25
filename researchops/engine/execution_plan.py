@@ -15,7 +15,7 @@ def normalize_stage(value):
     if not isinstance(value, dict) or set(value) - {"type", "model", "reasoning_effort"}:
         raise ValidationError("Invalid execution stage settings")
     kind = value.get("type")
-    if kind not in {"codex_exec", "antigravity_exec", "fake"}:
+    if kind not in {"codex_exec", "antigravity_exec", "opencode_exec", "fake"}:
         raise ValidationError("Unsupported execution provider")
     result = {"type": kind}
     for name in ("model", "reasoning_effort"):

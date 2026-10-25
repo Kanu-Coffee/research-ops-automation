@@ -20,6 +20,9 @@ uv run --frozen researchctl validate-runner-boundary --live \
 예시 cgroup 경로는 실제로 존재하고 실행 계정에 필요한 memory/pids 제어가 위임되어야
 한다. 이 명령은 권한을 부여하거나 mount·전역 정책·서비스를 구성하지 않는다.
 `--runner`는 `codex_exec` 또는 `antigravity_exec`이며 반복할 수 있다. 기본은 두 엔진이다.
+`opencode_exec`는 output-only 생성→별도 kernel 실행 계약을 아직 구현하지 않았으므로 이
+명령에서 unsupported로 남긴다. OpenCode 일반 실행·도구 검증은
+[OpenCode runner](OPENCODE_RUNNER.md)와 [도구 검증](RUNNER_TOOL_VALIDATION.md)을 따른다.
 `--timeout-seconds`는 모델 응답 기한 1~300초이며 기본 120초다. `--model`은 `--live`와
 함께 사용하는 선택값이고, `--output-parent`는 기존 증거 부모 디렉터리다.
 

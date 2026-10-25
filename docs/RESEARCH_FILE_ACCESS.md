@@ -7,7 +7,7 @@ Research worker는 `task.md`의 지시에 따라 원본 PDF·공식 이미지를
 ## 호출과 파일의 구분
 
 Production Research의 `public-research` 호출에는 결과 제출 helper와 함께 다음 함수를
-제공한다. Codex와 Agy에 같은 계약을 적용하며 Compose와 offline 호출에는 제공하지 않는다.
+제공한다. Codex, Agy와 OpenCode에 같은 계약을 적용하며 Compose와 offline 호출에는 제공하지 않는다.
 호출별 안내가 지정한 `.researchops-submit`을 Python import 경로에 추가한다.
 
 ```python

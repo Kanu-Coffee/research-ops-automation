@@ -906,13 +906,15 @@ class RunRepository:
         finally:
             conn.close()
 
-    def save_composition_result(self, run_id: str, task_id: str, comp_result: CompositionResult, *, revision: Optional[int] = None, fencing_token: Optional[str] = None, recipient_resolution: Optional[Dict[str, Any]] = None, composition_binding: Optional[Dict[str, Any]] = None) -> None:
+    def save_composition_result(self, run_id: str, task_id: str, comp_result: CompositionResult, *, revision: Optional[int] = None, fencing_token: Optional[str] = None, recipient_resolution: Optional[Dict[str, Any]] = None, composition_binding: Optional[Dict[str, Any]] = None, compose_artifacts: Optional[List[Dict[str, Any]]] = None) -> None:
         now = datetime.now(timezone.utc).isoformat()
         payload = comp_result.to_dict()
         if recipient_resolution is not None:
             payload["recipient_resolution"] = recipient_resolution
         if composition_binding is not None:
             payload["composition_binding"] = composition_binding
+        if compose_artifacts is not None:
+            payload["compose_artifacts"] = compose_artifacts
         with self.db.transaction() as conn:
             self._guard_owned_write(conn,run_id,fencing_token)
             if revision is None:
@@ -939,9 +941,11 @@ class RunRepository:
                                (run_id, revision, revision)).fetchone()
             if not row:
                 return None
+            result_data = json.loads(row["result_json"])
             return {"run_id": row["run_id"], "task_id": row["task_id"], "revision": row["revision"],
-                    "recipient_resolution": json.loads(row["result_json"]).get("recipient_resolution"),
-                    "composition_binding": json.loads(row["result_json"]).get("composition_binding")}
+                    "recipient_resolution": result_data.get("recipient_resolution"),
+                    "composition_binding": result_data.get("composition_binding"),
+                    "compose_artifacts": result_data.get("compose_artifacts")}
         finally:
             conn.close()
 

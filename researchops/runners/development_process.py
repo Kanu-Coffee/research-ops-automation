@@ -14,6 +14,8 @@ from pathlib import Path
 import selectors
 import signal
 import subprocess
+import sys
+import tempfile
 import time
 from typing import Callable
 
@@ -89,7 +91,8 @@ def run_bounded(argv: list[str], *, cwd: Path, env: dict[str, str],
                 cancellation_check: Callable[[], bool] | None = None,
                 stdout_path: Path | None = None, stderr_path: Path | None = None,
                 max_preview_bytes: int = 65_536,
-                stdout_consumer: Callable[[bytes], None] | None = None) -> ProcessResult:
+                stdout_consumer: Callable[[bytes], None] | None = None,
+                direct_stdout: bool = False) -> ProcessResult:
     """Run one trusted CLI with raw, combined-size-bounded stdout and stderr.
 
     No shell, environment inheritance, auth-file reads, or persistent/global
@@ -108,6 +111,8 @@ def run_bounded(argv: list[str], *, cwd: Path, env: dict[str, str],
         raise ValueError("max_output_bytes must be a positive integer")
     if type(max_preview_bytes) is not int or max_preview_bytes <= 0:
         raise ValueError("max_preview_bytes must be a positive integer")
+    if type(direct_stdout) is not bool or direct_stdout and (stdout_path is not None or stdout_consumer is not None):
+        raise ValueError("Direct stdout requires no stdout log or consumer")
     log_paths = {"stdout": Path(stdout_path) if stdout_path is not None else None,
                  "stderr": Path(stderr_path) if stderr_path is not None else None}
     if any(path is not None and not path.is_absolute() for path in log_paths.values()):
@@ -148,6 +153,7 @@ def run_bounded(argv: list[str], *, cwd: Path, env: dict[str, str],
     cleanup_verified = True
     returncode = -1
     cleanup_evidence = {}
+    direct_file = None
 
     def close_pipe(pipe):
         try:
@@ -217,17 +223,30 @@ def run_bounded(argv: list[str], *, cwd: Path, env: dict[str, str],
                     error = "log_open_failed: " + type(exc).__name__
                     raise
         try:
-            proc = subprocess.Popen(argv, cwd=cwd, env=env, shell=False,
+            launch_argv = argv
+            if direct_stdout:
+                # Some CLIs exit before their asynchronous pipe writer flushes.
+                # A regular file makes their stdout writes synchronous. Bound
+                # its size in the child, without preexec_fn in threaded workers.
+                direct_file = tempfile.TemporaryFile(mode="w+b", dir=cwd)
+                launch_argv = [sys.executable, "-I", "-c",
+                    "import os,resource,sys; n=int(sys.argv[1]); "
+                    "resource.setrlimit(resource.RLIMIT_FSIZE,(n,n)); "
+                    "os.execvpe(sys.argv[2],sys.argv[2:],os.environ)",
+                    str(max_output_bytes), *argv]
+            proc = subprocess.Popen(launch_argv, cwd=cwd, env=env, shell=False,
                                     stdin=subprocess.PIPE if stdin is not None else subprocess.DEVNULL,
-                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                    stdout=direct_file if direct_stdout else subprocess.PIPE, stderr=subprocess.PIPE,
                                     start_new_session=True, close_fds=True, bufsize=0)
         except (OSError, ValueError) as exc:
             error = "spawn_failed: " + type(exc).__name__
         if proc is not None:
-            pipes.extend((proc.stdout, proc.stderr))
+            pipes.extend(pipe for pipe in (proc.stdout, proc.stderr) if pipe is not None)
             if proc.stdin is not None:
                 pipes.append(proc.stdin)
             for name, pipe in (("stdout", proc.stdout), ("stderr", proc.stderr)):
+                if pipe is None:
+                    continue
                 os.set_blocking(pipe.fileno(), False)
                 selector.register(pipe, selectors.EVENT_READ, name)
             if proc.stdin is not None:
@@ -238,6 +257,8 @@ def run_bounded(argv: list[str], *, cwd: Path, env: dict[str, str],
                     proc.stdin.close()
             deadline = time.monotonic() + timeout_seconds
             while True:
+                if direct_file is not None and os.fstat(direct_file.fileno()).st_size + captured_bytes > max_output_bytes:
+                    error = error or "output_limit_exceeded"
                 if error is not None:
                     break
                 if cancellation_check is not None:
@@ -335,6 +356,18 @@ def run_bounded(argv: list[str], *, cwd: Path, env: dict[str, str],
                 stream.close()
             except OSError as exc:
                 error = error or "log_write_failed: " + type(exc).__name__
+
+        if direct_file is not None:
+            try:
+                direct_file.seek(0)
+                remaining = max(0, max_output_bytes - captured_bytes)
+                raw = direct_file.read(remaining + 1)
+                if len(raw) > remaining or returncode == -getattr(signal, "SIGXFSZ", 25):
+                    error = error or "output_limit_exceeded"
+                buffers["stdout"].extend(raw[:remaining])
+                stream_bytes["stdout"] = min(len(raw), remaining)
+            finally:
+                direct_file.close()
 
     return ProcessResult(returncode, bytes(buffers["stdout"]), bytes(buffers["stderr"]),
                          proc is not None, cleanup_verified, error, timed_out, cancelled, cleanup_evidence,

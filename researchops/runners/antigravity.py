@@ -5,6 +5,6 @@ from researchops.runners.production import TrustedProductionRunner
 
 
 class AntigravityRunner(TrustedProductionRunner):
-    def __init__(self, antigravity_binary: str = "agy", *, cgroup_root: Path | None = None):
+    def __init__(self, antigravity_binary: str = "agy", *, cgroup_root: Path | None = None, settings=None):
         self.antigravity_binary = antigravity_binary
-        super().__init__("antigravity_exec", antigravity_binary, cgroup_root=cgroup_root)
+        super().__init__("antigravity_exec", antigravity_binary, cgroup_root=cgroup_root, settings=settings)

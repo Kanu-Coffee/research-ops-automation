@@ -129,7 +129,8 @@ def render_detail(run_data, artifacts, events, flash=None, *, model_catalog=None
             source_link = f'<p class="form-help">작성 원본: <a href="/runs/{_e(source)}">{_e(source)}</a></p>' if source else ''
             panel += '<section class="card"><h2 class="card-title">이메일 전송 전용 · AI 실행 없음</h2><p class="form-help">작성된 이메일 원문과 첨부를 사용합니다.</p>' + source_link + '</section>'
         else:
-            panel += '<details class="card"><summary>사용한 AI 설정</summary>' + render_execution_history(run_data.get('execution_settings'), run_data.get('execution_plan')) + '</details>'
+            img_set = (run_data.get('task') or {}).get('image_generation') or run_data.get('image_generation') or ((run_data.get('execution_plan') or {}).get('image_generation'))
+            panel += '<details class="card"><summary>사용한 AI 설정</summary>' + render_execution_history(run_data.get('execution_settings'), run_data.get('execution_plan'), img_set) + '</details>'
             if can_write():
                 retry = render_retry_panel(run_data, model_catalog, values=retry_values, current_task=current_task)
                 if retry:

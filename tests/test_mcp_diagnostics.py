@@ -42,12 +42,13 @@ class TestMCPDiagnostics(unittest.TestCase):
             # Use a matching two-argument fixture without invoking a real CLI.
             inspect.side_effect = lambda provider, binary: inventory(provider)
             health = self.app.doctor.check_all()
-        self.assertEqual(inspect.call_count, 2)
+        self.assertEqual(inspect.call_count, 3)
         self.assertEqual(health["overall_status"], "ok")
         self.assertTrue(health["live_runner_ready"])
         self.assertFalse(health["mcp"]["affects_readiness"])
         self.assertFalse(health["mcp"]["connections_checked"])
-        self.assertEqual(set(health["mcp"]["providers"]), {"codex_exec", "antigravity_exec"})
+        self.assertEqual(set(health["mcp"]["providers"]),
+                         {"codex_exec", "antigravity_exec", "opencode_exec"})
 
     def test_missing_cli_does_not_inspect_operator_configuration(self):
         with patch("researchops.services.doctor.shutil.which", return_value=None), \

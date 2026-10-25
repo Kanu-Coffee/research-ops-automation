@@ -24,6 +24,40 @@ def trace_bytes(error=QUOTA, status="ERROR", steps=()):
 
 
 class ProviderDiagnosticsTests(unittest.TestCase):
+    def test_account_verification_diagnostic_parity(self):
+        raw = trace_bytes(error="Verification Required")
+        collector = ProductionToolTraceCollector("antigravity_exec")
+        collector.feed(raw)
+        for trace in (parse_tool_trace("antigravity_exec", raw), collector.finish()):
+            self.assertTrue(trace.terminal)
+            self.assertFalse(trace.successful_terminal)
+            self.assertEqual(trace.provider_error_code, "account_verification_required")
+            self.assertEqual(trace.provider_diagnostic, {"code": "account_verification_required"})
+            self.assertEqual(trace.response_diagnostic["code"], "response_missing")
+
+    def test_account_verification_in_result_text_is_not_provider_failure(self):
+        result = {"status": "SUCCESS", "structured_output": {"response_json": "Verification Required"}}
+        self.assertIsNone(agy_error_diagnostic(result))
+        self.assertEqual(agy_error_diagnostic({"status": "ERROR", "error": "User says Verification Required"}),
+                         {"code": "provider_error"})
+
+    def test_account_verification_exit_three_is_primary_without_import(self):
+        fixture = self._harness()
+        (fixture.input / "composition-input.json").write_text("{}")
+        raw = trace_bytes(error="Verification Required")
+        failure = ProcessResult(3, raw, b'AGY_ERROR: synthetic-private-details', True, True)
+        with patch("shutil.which", return_value="/usr/bin/agy"), \
+             patch("researchops.runners.production.run_bounded", return_value=failure):
+            result = fixture.execute(AntigravityRunner(), fixture.context("compose"))
+        self.assertFalse(result.success)
+        self.assertTrue(result.cleanup_verified)
+        self.assertEqual(result.exit_code, 3)
+        self.assertIn("AGY_ACCOUNT_VERIFICATION_REQUIRED", result.error_message)
+        self.assertIn("Research 재사용", result.error_message)
+        self.assertNotIn("Provider exited", result.error_message)
+        self.assertFalse(result.output_files)
+        self.assertNotIn("synthetic-private-details", json.dumps(result.events))
+
     def test_quota_diagnostic_parity_and_safe_reset_hint(self):
         raw = trace_bytes()
         collector = ProductionToolTraceCollector("antigravity_exec")
